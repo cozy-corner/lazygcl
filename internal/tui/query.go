@@ -8,8 +8,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cozy-corner/lazygcl/internal/gcp"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // pageBatch is how many entries each fetchPage Cmd pulls from the stream
@@ -65,16 +63,9 @@ func fetchPage(ctx context.Context, s gcp.EntryStream, gen, n int) tea.Msg {
 			if errors.Is(err, context.Canceled) {
 				return queryResultMsg{gen: gen, entries: entries, done: true}
 			}
-			return errMsg{gen: gen, err: err, syntax: isFilterSyntaxError(err)}
+			return errMsg{gen: gen, err: err, syntax: errors.Is(err, gcp.ErrInvalidFilter)}
 		}
 		entries = append(entries, e)
 	}
 	return queryResultMsg{gen: gen, entries: entries, done: false}
-}
-
-func isFilterSyntaxError(err error) bool {
-	if s, ok := status.FromError(err); ok {
-		return s.Code() == codes.InvalidArgument
-	}
-	return false
 }

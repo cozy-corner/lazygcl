@@ -10,11 +10,17 @@ import (
 	"cloud.google.com/go/logging"
 	"cloud.google.com/go/logging/logadmin"
 	"google.golang.org/api/iterator"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 const defaultPageSize int32 = 200
+
+// ErrInvalidFilter wraps Cloud Logging filter-syntax errors so callers can
+// recognize them with errors.Is without importing gRPC error types.
+var ErrInvalidFilter = errors.New("invalid filter")
 
 type Client struct {
 	lc      *logadmin.Client
@@ -65,9 +71,19 @@ func (s *pagedStream) Next(_ context.Context) (LogEntry, error) {
 		return LogEntry{}, io.EOF
 	}
 	if err != nil {
+		if isInvalidArgument(err) {
+			return LogEntry{}, fmt.Errorf("%w: %v", ErrInvalidFilter, err)
+		}
 		return LogEntry{}, err
 	}
 	return convert(e), nil
+}
+
+func isInvalidArgument(err error) bool {
+	if s, ok := status.FromError(err); ok {
+		return s.Code() == codes.InvalidArgument
+	}
+	return false
 }
 
 // ListResourceDescriptors returns the global Cloud Logging catalog of monitored
