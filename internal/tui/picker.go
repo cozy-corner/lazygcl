@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cozy-corner/lazygcl/internal/gcp"
+	"github.com/sahilm/fuzzy"
 )
 
 type pickerKind int
@@ -115,16 +116,28 @@ func shortLogName(full string) string {
 	return full
 }
 
-// filteredPickerItems returns the indices of items matching the current input.
+// filteredPickerItems returns the indices of items matching the current
+// input, ranked fzf-style: characters must appear in order but may be
+// non-contiguous, and tighter / earlier matches score higher.
 func (m Model) filteredPickerItems() []int {
-	q := strings.ToLower(strings.TrimSpace(m.pickerInput.Value()))
-	indices := make([]int, 0, len(m.pickerItems))
-	for i, it := range m.pickerItems {
-		if q == "" || strings.Contains(it.FilterKey, q) {
-			indices = append(indices, i)
+	q := strings.TrimSpace(m.pickerInput.Value())
+	if q == "" {
+		all := make([]int, len(m.pickerItems))
+		for i := range all {
+			all[i] = i
 		}
+		return all
 	}
-	return indices
+	keys := make([]string, len(m.pickerItems))
+	for i, it := range m.pickerItems {
+		keys[i] = it.FilterKey
+	}
+	matches := fuzzy.Find(q, keys)
+	out := make([]int, 0, len(matches))
+	for _, mm := range matches {
+		out = append(out, mm.Index)
+	}
+	return out
 }
 
 func (m Model) renderPicker() string {
