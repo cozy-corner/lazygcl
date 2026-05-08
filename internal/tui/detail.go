@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/alecthomas/chroma/v2/formatters"
+	"github.com/alecthomas/chroma/v2/lexers"
+	"github.com/alecthomas/chroma/v2/styles"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cozy-corner/lazygcl/internal/gcp"
 )
@@ -48,8 +51,36 @@ func formatDetail(e gcp.LogEntry) string {
 		if err := json.Indent(&pretty, e.Payload.JSON, "", "  "); err != nil {
 			b.Write(e.Payload.JSON)
 		} else {
-			b.Write(pretty.Bytes())
+			b.WriteString(highlightJSON(pretty.String()))
 		}
 	}
 	return b.String()
+}
+
+// highlightJSON adds ANSI color escapes around JSON tokens so the viewport
+// renders the payload with chroma's monokai palette. Returns the input
+// unchanged if any chroma stage fails — a colorless detail view is better
+// than nothing.
+func highlightJSON(src string) string {
+	lexer := lexers.Get("json")
+	if lexer == nil {
+		return src
+	}
+	style := styles.Get("monokai")
+	if style == nil {
+		style = styles.Fallback
+	}
+	formatter := formatters.Get("terminal256")
+	if formatter == nil {
+		return src
+	}
+	iter, err := lexer.Tokenise(nil, src)
+	if err != nil {
+		return src
+	}
+	var buf bytes.Buffer
+	if err := formatter.Format(&buf, style, iter); err != nil {
+		return src
+	}
+	return buf.String()
 }
