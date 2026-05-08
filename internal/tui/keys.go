@@ -47,9 +47,9 @@ func (m Model) handleResultsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.query.Focus()
 		return m, nil
 	case tea.KeyDown:
-		return m.moveCursor(1), nil
+		return m.moveCursor(1)
 	case tea.KeyUp:
-		return m.moveCursor(-1), nil
+		return m.moveCursor(-1)
 	case tea.KeyEnter:
 		return m.openDetail()
 	case tea.KeyCtrlC:
@@ -58,9 +58,9 @@ func (m Model) handleResultsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch string(msg.Runes) {
 	case "j":
-		return m.moveCursor(1), nil
+		return m.moveCursor(1)
 	case "k":
-		return m.moveCursor(-1), nil
+		return m.moveCursor(-1)
 	case "g":
 		m.cursor = 0
 		m.offset = 0
@@ -70,7 +70,7 @@ func (m Model) handleResultsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor = len(m.entries) - 1
 			m.adjustOffset()
 		}
-		return m, nil
+		return m.maybeFetchMore()
 	case "q":
 		m.cancel()
 		return m, tea.Quit
@@ -96,9 +96,9 @@ func (m Model) handleDetailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) moveCursor(delta int) Model {
+func (m Model) moveCursor(delta int) (Model, tea.Cmd) {
 	if len(m.entries) == 0 {
-		return m
+		return m, nil
 	}
 	m.cursor += delta
 	if m.cursor < 0 {
@@ -108,7 +108,29 @@ func (m Model) moveCursor(delta int) Model {
 		m.cursor = len(m.entries) - 1
 	}
 	m.adjustOffset()
-	return m
+	return m.maybeFetchMore()
+}
+
+// pagingThreshold is how many entries can remain after the cursor before the
+// next batch is auto-fetched.
+const pagingThreshold = 10
+
+// maybeFetchMore queues the next page if the cursor is near the tail of the
+// current results and the stream has not yet been exhausted.
+func (m Model) maybeFetchMore() (Model, tea.Cmd) {
+	if m.streamDone || m.loading || m.stream == nil {
+		return m, nil
+	}
+	if len(m.entries)-m.cursor-1 > pagingThreshold {
+		return m, nil
+	}
+	m.loading = true
+	gen := m.queryGen
+	stream := m.stream
+	ctx := m.streamCtx
+	return m, func() tea.Msg {
+		return fetchPage(ctx, stream, gen, pageBatch)
+	}
 }
 
 func (m *Model) adjustOffset() {
