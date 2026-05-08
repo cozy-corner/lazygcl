@@ -1,0 +1,13 @@
+# Binaries
+/lazygcl
+/dist/
+
+# Go
+*.exe
+*.test
+*.out
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
