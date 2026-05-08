@@ -43,3 +43,11 @@ type SearchParams struct {
 	NewestFirst bool
 	PageSize    int32
 }
+
+// ResourceDescriptor mirrors the fields of monitoredres.MonitoredResourceDescriptor
+// that lazygcl actually surfaces in the picker.
+type ResourceDescriptor struct {
+	Type        string
+	DisplayName string
+	Description string
+}

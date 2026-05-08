@@ -70,6 +70,47 @@ func (s *pagedStream) Next(_ context.Context) (LogEntry, error) {
 	return convert(e), nil
 }
 
+// ListResourceDescriptors returns the global Cloud Logging catalog of monitored
+// resource types. Not project-scoped — picking a type that has no entries in
+// the user's project just yields an empty result on the next query.
+func (c *Client) ListResourceDescriptors(ctx context.Context) ([]ResourceDescriptor, error) {
+	it := c.lc.ResourceDescriptors(ctx)
+	var out []ResourceDescriptor
+	for {
+		rd, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("listing resource descriptors: %w", err)
+		}
+		out = append(out, ResourceDescriptor{
+			Type:        rd.Type,
+			DisplayName: rd.DisplayName,
+			Description: rd.Description,
+		})
+	}
+	return out, nil
+}
+
+// ListLogNames returns the full logName values that have entries in the
+// project bound to this client.
+func (c *Client) ListLogNames(ctx context.Context) ([]string, error) {
+	it := c.lc.Logs(ctx)
+	var out []string
+	for {
+		name, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("listing logs: %w", err)
+		}
+		out = append(out, name)
+	}
+	return out, nil
+}
+
 func convert(e *logging.Entry) LogEntry {
 	out := LogEntry{
 		Timestamp: e.Timestamp,

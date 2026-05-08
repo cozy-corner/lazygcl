@@ -1,6 +1,22 @@
 package tui
 
-import "github.com/cozy-corner/lazygcl/internal/gcp"
+import (
+	"github.com/cozy-corner/lazygcl/internal/gcp"
+)
+
+// pickerLoadedMsg delivers items for the picker view. Either Resources or
+// LogNames is populated depending on which kind was requested.
+type pickerLoadedMsg struct {
+	kind      pickerKind
+	resources []gcp.ResourceDescriptor
+	logNames  []string
+}
+
+// pickerErrMsg surfaces a load failure for the picker.
+type pickerErrMsg struct {
+	kind pickerKind
+	err  error
+}
 
 // queryResultMsg delivers a page of entries from a Search. The generation
 // field lets the model drop messages from a query that was superseded by a
