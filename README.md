@@ -1,6 +1,6 @@
 # lazygcl
 
-A terminal viewer for Google Cloud Logging. Type a [Logging query language](https://cloud.google.com/logging/docs/view/logging-query-language) filter, see matching entries, drill into the JSON payload — without leaving your shell.
+A terminal viewer for Google Cloud Logging. Type a [Logging query language](https://cloud.google.com/logging/docs/view/logging-query-language) filter, see matching entries, and view each one as the same wire-format JSON `gcloud logging read --format=json` would emit — without leaving your shell.
 
 Inspired by [lazycwl](https://github.com/myuron/lazycwl) (its AWS counterpart).
 
@@ -43,9 +43,13 @@ Project resolution order: `--project` flag → `GOOGLE_CLOUD_PROJECT` env → `g
 | `Esc` | Back (close detail / cancel picker) |
 | `q` / `Ctrl+C` | Quit |
 
-The resource type picker lists every monitored resource type Cloud Logging knows about (global catalog). Picking one that isn't producing logs in your project just yields an empty result. The logName picker lists names that actually have entries in the bound project.
+Both pickers support fzf-style fuzzy filtering: `gci` matches `gce_instance`, `run` matches `cloud_run_revision`, and so on. The resource type picker lists every monitored resource type Cloud Logging knows about (global catalog) — picking one that isn't producing logs in your project just yields an empty result. The logName picker lists names that actually have entries in the bound project.
 
 Auto-paging fires when the cursor is near the end of the loaded results.
+
+## Detail view
+
+Pressing `Enter` on a result renders the entry as a single LogEntry JSON object — the same shape as the Cloud Logging REST API and `gcloud logging read --format=json`. JSON is syntax-highlighted with [chroma](https://github.com/alecthomas/chroma) (monokai). Copy/pipe-friendly for further `jq`-style work.
 
 ## Example queries
 
