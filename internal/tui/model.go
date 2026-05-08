@@ -51,8 +51,9 @@ type Model struct {
 	streamCancel context.CancelFunc
 	streamDone   bool
 
-	loading bool
-	err     error
+	loading     bool
+	err         error
+	errIsSyntax bool
 }
 
 type Options struct {
@@ -99,6 +100,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.loading = false
 		m.err = msg.err
+		m.errIsSyntax = msg.syntax
 		return m, nil
 	case queryResultMsg:
 		if msg.gen != m.queryGen {
@@ -143,10 +145,10 @@ func (m Model) View() string {
 }
 
 var (
-	headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	errorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-	cursorStyle = lipgloss.NewStyle().Background(lipgloss.Color("236")).Bold(true)
+	headerStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
+	dimStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	errorStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+	cursorStyle    = lipgloss.NewStyle().Background(lipgloss.Color("236")).Bold(true)
 	severityStyles = map[string]lipgloss.Style{
 		"Error":    lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
 		"Warning":  lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
@@ -165,15 +167,23 @@ func (m Model) renderMain() string {
 	}
 	fmt.Fprintln(&b, headerStyle.Render(queryHeader))
 	fmt.Fprintln(&b, m.query.View())
+	if m.err != nil && m.errIsSyntax {
+		fmt.Fprintln(&b, errorStyle.Render("filter syntax: "+m.err.Error()))
+	}
 
 	resultsHeader := fmt.Sprintf("Results (%d)", len(m.entries))
+	if m.streamDone {
+		resultsHeader += " — end"
+	} else if len(m.entries) > 0 {
+		resultsHeader += " — more available"
+	}
 	if m.focus == paneResults {
 		resultsHeader += " *"
 	}
 	fmt.Fprintln(&b, headerStyle.Render(resultsHeader))
 	b.WriteString(m.renderResults())
 
-	if m.err != nil {
+	if m.err != nil && !m.errIsSyntax {
 		fmt.Fprintln(&b, errorStyle.Render("error: "+m.err.Error()))
 	}
 	if m.loading {
