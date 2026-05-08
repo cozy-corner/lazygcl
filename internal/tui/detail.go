@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
@@ -24,41 +25,58 @@ func (m Model) openDetail() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// wireLogEntry mirrors the field names of the Cloud Logging REST LogEntry
+// resource so the detail view reads identically to `gcloud logging read
+// --format=json` and the API response. Field order is fixed by Go's struct
+// marshaling, which is what we want here.
+type wireLogEntry struct {
+	Timestamp    string          `json:"timestamp,omitempty"`
+	Severity     string          `json:"severity,omitempty"`
+	LogName      string          `json:"logName,omitempty"`
+	Resource     *wireResource   `json:"resource,omitempty"`
+	InsertID     string          `json:"insertId,omitempty"`
+	TextPayload  string          `json:"textPayload,omitempty"`
+	JSONPayload  json.RawMessage `json:"jsonPayload,omitempty"`
+	ProtoPayload json.RawMessage `json:"protoPayload,omitempty"`
+}
+
+type wireResource struct {
+	Type   string            `json:"type"`
+	Labels map[string]string `json:"labels,omitempty"`
+}
+
 func formatDetail(e gcp.LogEntry) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "Timestamp: %s\n", e.Timestamp.Local().Format("2006-01-02 15:04:05 MST"))
-	if e.Severity != "" {
-		fmt.Fprintf(&b, "Severity:  %s\n", e.Severity)
+	w := wireLogEntry{
+		LogName:  e.LogName,
+		InsertID: e.InsertID,
 	}
-	if e.LogName != "" {
-		fmt.Fprintf(&b, "Log:       %s\n", e.LogName)
+	if !e.Timestamp.IsZero() {
+		w.Timestamp = e.Timestamp.UTC().Format(time.RFC3339Nano)
+	}
+	if e.Severity != "" {
+		w.Severity = strings.ToUpper(e.Severity)
 	}
 	if e.Resource.Type != "" {
-		fmt.Fprintf(&b, "Resource:  %s\n", e.Resource.Type)
-		for k, v := range e.Resource.Labels {
-			fmt.Fprintf(&b, "  %s: %s\n", k, v)
-		}
+		w.Resource = &wireResource{Type: e.Resource.Type, Labels: e.Resource.Labels}
 	}
-	if e.InsertID != "" {
-		fmt.Fprintf(&b, "InsertID:  %s\n", e.InsertID)
-	}
-	b.WriteString("\nPayload:\n")
 	switch e.Payload.Kind {
 	case gcp.PayloadText:
-		b.WriteString(e.Payload.Text)
-	default:
-		var pretty bytes.Buffer
-		if err := json.Indent(&pretty, e.Payload.JSON, "", "  "); err != nil {
-			b.Write(e.Payload.JSON)
-		} else {
-			b.WriteString(highlightJSON(pretty.String()))
-		}
+		w.TextPayload = e.Payload.Text
+	case gcp.PayloadJSON:
+		w.JSONPayload = e.Payload.JSON
+	case gcp.PayloadProto:
+		w.ProtoPayload = e.Payload.JSON
 	}
-	return b.String()
+
+	raw, err := json.MarshalIndent(w, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("error formatting entry: %v", err)
+	}
+	return highlightJSON(string(raw))
 }
 
 // highlightJSON adds ANSI color escapes around JSON tokens so the viewport
-// renders the payload with chroma's monokai palette. Returns the input
+// renders the entry with chroma's monokai palette. Returns the input
 // unchanged if any chroma stage fails — a colorless detail view is better
 // than nothing.
 func highlightJSON(src string) string {
