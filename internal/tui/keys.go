@@ -5,8 +5,17 @@ import (
 )
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.currentView == viewPicker {
+		return m.handlePickerKey(msg)
+	}
 	if m.currentView == viewDetail {
 		return m.handleDetailKey(msg)
+	}
+	switch msg.Type {
+	case tea.KeyCtrlR:
+		return m.openPicker(pickerResource)
+	case tea.KeyCtrlL:
+		return m.openPicker(pickerLogName)
 	}
 	if m.focus == paneQuery {
 		return m.handleQueryKey(msg)

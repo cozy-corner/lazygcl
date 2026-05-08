@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -17,6 +18,7 @@ type view int
 const (
 	viewMain view = iota // query + results
 	viewDetail
+	viewPicker
 )
 
 type pane int
@@ -54,6 +56,15 @@ type Model struct {
 	loading     bool
 	err         error
 	errIsSyntax bool
+
+	// Picker state. Populated when currentView == viewPicker.
+	pickerKind    pickerKind
+	pickerInput   textinput.Model
+	pickerItems   []pickerItem
+	pickerCursor  int
+	pickerOffset  int
+	pickerLoading bool
+	pickerErr     error
 }
 
 type Options struct {
@@ -120,6 +131,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.query.Blur()
 		}
 		return m, nil
+	case pickerLoadedMsg:
+		if m.currentView != viewPicker || msg.kind != m.pickerKind {
+			return m, nil
+		}
+		m.pickerLoading = false
+		switch msg.kind {
+		case pickerResource:
+			m.pickerItems = resourceItems(msg.resources)
+		case pickerLogName:
+			m.pickerItems = logNameItems(msg.logNames)
+		}
+		return m, nil
+	case pickerErrMsg:
+		if m.currentView != viewPicker || msg.kind != m.pickerKind {
+			return m, nil
+		}
+		m.pickerLoading = false
+		m.pickerErr = msg.err
+		return m, nil
 	}
 
 	if m.focus == paneQuery && m.currentView == viewMain {
@@ -132,6 +162,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detail, cmd = m.detail.Update(msg)
 		return m, cmd
 	}
+	if m.currentView == viewPicker {
+		var cmd tea.Cmd
+		m.pickerInput, cmd = m.pickerInput.Update(msg)
+		return m, cmd
+	}
 	return m, nil
 }
 
@@ -139,6 +174,8 @@ func (m Model) View() string {
 	switch m.currentView {
 	case viewDetail:
 		return m.renderDetail()
+	case viewPicker:
+		return m.renderPicker()
 	default:
 		return m.renderMain()
 	}
@@ -189,7 +226,7 @@ func (m Model) renderMain() string {
 	if m.loading {
 		fmt.Fprintln(&b, dimStyle.Render("loading…"))
 	}
-	fmt.Fprintln(&b, dimStyle.Render("[tab] focus  [enter] run/open  [esc] back  [q] quit  project="+m.project))
+	fmt.Fprintln(&b, dimStyle.Render("[tab] focus  [enter] run  [^R] resource.type  [^L] logName  [q] quit  project="+m.project))
 	return b.String()
 }
 

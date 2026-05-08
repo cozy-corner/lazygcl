@@ -38,8 +38,12 @@ Project resolution order: `--project` flag → `GOOGLE_CLOUD_PROJECT` env → `g
 | `Enter` (in results) | Open the entry's detail view |
 | `j` / `k`, `↑` / `↓` | Move cursor |
 | `g` / `G` | Jump to top / bottom |
-| `Esc` (in detail) | Back to results |
+| `Ctrl+R` | Open the resource type picker |
+| `Ctrl+L` | Open the logName picker |
+| `Esc` | Back (close detail / cancel picker) |
 | `q` / `Ctrl+C` | Quit |
+
+The resource type picker lists every monitored resource type Cloud Logging knows about (global catalog). Picking one that isn't producing logs in your project just yields an empty result. The logName picker lists names that actually have entries in the bound project.
 
 Auto-paging fires when the cursor is near the end of the loaded results.
 
