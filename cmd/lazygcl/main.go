@@ -1,11 +1,16 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/cozy-corner/lazygcl/internal/gcp"
+	"github.com/cozy-corner/lazygcl/internal/tui"
 )
 
 const version = "0.0.1"
@@ -26,7 +31,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("lazygcl", version, "project="+resolved)
+	ctx := context.Background()
+	client, err := gcp.NewClient(ctx, resolved)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "lazygcl: failed to create logging client:", err)
+		os.Exit(1)
+	}
+	defer client.Close()
+
+	model := tui.NewModel(tui.Options{Client: client, Project: resolved})
+	if _, err := tea.NewProgram(model, tea.WithAltScreen()).Run(); err != nil {
+		fmt.Fprintln(os.Stderr, "lazygcl:", err)
+		os.Exit(1)
+	}
 }
 
 // resolveProject picks a project ID from the flag, then GOOGLE_CLOUD_PROJECT,
