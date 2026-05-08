@@ -43,6 +43,14 @@ type Model struct {
 	cursor  int
 	offset  int
 
+	// Active search state. queryGen is bumped on each submission so stale
+	// results from a superseded query can be dropped in Update.
+	queryGen     int
+	stream       gcp.EntryStream
+	streamCtx    context.Context
+	streamCancel context.CancelFunc
+	streamDone   bool
+
 	loading bool
 	err     error
 }
@@ -86,16 +94,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	case errMsg:
+		if msg.gen != m.queryGen {
+			return m, nil
+		}
 		m.loading = false
 		m.err = msg.err
 		return m, nil
 	case queryResultMsg:
+		if msg.gen != m.queryGen {
+			return m, nil
+		}
 		m.loading = false
-		m.entries = msg.entries
-		m.cursor = 0
-		m.offset = 0
-		if len(m.entries) > 0 {
+		m.entries = append(m.entries, msg.entries...)
+		m.streamDone = msg.done
+		if m.cursor >= len(m.entries) {
+			m.cursor = len(m.entries) - 1
+		}
+		if m.cursor < 0 {
+			m.cursor = 0
+		}
+		if len(m.entries) > 0 && m.focus == paneQuery {
 			m.focus = paneResults
+			m.query.Blur()
 		}
 		return m, nil
 	}

@@ -33,7 +33,7 @@ func (m Model) handleQueryKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	if msg.Type == tea.KeyEnter {
-		return m, m.runQuery()
+		return m.runQuery()
 	}
 	var cmd tea.Cmd
 	m.query, cmd = m.query.Update(msg)
