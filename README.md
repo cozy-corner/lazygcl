@@ -79,18 +79,18 @@ Toolchain pinned via [mise](https://mise.jdx.dev/). After cloning:
 
 ```sh
 mise install        # installs go, golangci-lint, lefthook, goimports, govulncheck at the pinned versions
-make install        # also wires up lefthook pre-commit hooks (gofmt + goimports auto-format)
+mise run install    # wires up lefthook pre-commit hooks (gofmt + goimports auto-format)
 ```
 
-Common tasks (all delegate to mise so the pinned tool versions are used):
+Common tasks (defined in `.mise.toml`, run with the pinned tool versions):
 
 ```sh
-make build      # go build
-make test       # go test ./...
-make lint       # golangci-lint run ./...
-make fmt        # in-place gofmt + goimports
-make vuln       # govulncheck ./...
-make check      # lint + test + vuln (matches what CI will run)
+mise run build      # go build
+mise run test       # go test ./...
+mise run lint       # golangci-lint run ./...
+mise run fmt        # in-place gofmt + goimports
+mise run vuln       # govulncheck ./...
+mise run check      # lint + test + vuln
 ```
 
 ## License
