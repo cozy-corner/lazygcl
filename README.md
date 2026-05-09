@@ -73,6 +73,26 @@ Boolean operators (`AND` / `OR` / `NOT`) **must be uppercase** — lowercase is 
 
 v1 is read-only history queries. Live tail (`entries.tail`) is planned for v2. The Cloud Logging API caps `entries.list` at **60 requests / minute / project**, so very rapid scrolling through large result sets can hit the quota.
 
+## Development
+
+Toolchain pinned via [mise](https://mise.jdx.dev/). After cloning:
+
+```sh
+mise install        # installs go, golangci-lint, lefthook, goimports, govulncheck at the pinned versions
+mise run install    # wires up lefthook pre-commit hooks (gofmt + goimports auto-format)
+```
+
+Common tasks (defined in `.mise.toml`, run with the pinned tool versions):
+
+```sh
+mise run build      # go build
+mise run test       # go test ./...
+mise run lint       # golangci-lint run ./...
+mise run fmt        # in-place gofmt + goimports
+mise run vuln       # govulncheck ./...
+mise run check      # lint + test + vuln
+```
+
 ## License
 
 MIT
