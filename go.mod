@@ -1,6 +1,6 @@
 module github.com/cozy-corner/lazygcl
 
-go 1.25.2
+go 1.25.10
 
 require (
 	cloud.google.com/go/logging v1.18.0

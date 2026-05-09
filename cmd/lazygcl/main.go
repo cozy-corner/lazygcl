@@ -37,7 +37,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "lazygcl: failed to create logging client:", err)
 		os.Exit(1)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	model := tui.NewModel(tui.Options{Client: client, Project: resolved})
 	if _, err := tea.NewProgram(model, tea.WithAltScreen()).Run(); err != nil {
