@@ -200,9 +200,9 @@ func (m Model) handlePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case tea.KeyEnter:
 		return m.applyPickerSelection()
-	case tea.KeyDown:
+	case tea.KeyDown, tea.KeyCtrlJ, tea.KeyCtrlN:
 		return m.movePickerCursor(1), nil
-	case tea.KeyUp:
+	case tea.KeyUp, tea.KeyCtrlK, tea.KeyCtrlP:
 		return m.movePickerCursor(-1), nil
 	}
 	var cmd tea.Cmd
