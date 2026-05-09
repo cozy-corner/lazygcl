@@ -14,8 +14,8 @@ description = "build the lazygcl binary"
 run = "go build -o lazygcl ./cmd/lazygcl"
 
 [tasks.test]
-description = "run unit tests"
-run = "go test ./..."
+description = "run unit tests with the race detector"
+run = "go test -race ./..."
 
 [tasks.lint]
 description = "run static analysis"
@@ -25,10 +25,25 @@ run = "golangci-lint run ./..."
 description = "format the codebase in place"
 run = "goimports -w ."
 
+[tasks.fmt-check]
+description = "fail if any file needs goimports"
+run = '''
+unformatted=$(goimports -l .)
+if [ -n "$unformatted" ]; then
+  echo "Files need 'mise run fmt':"
+  echo "$unformatted"
+  exit 1
+fi
+'''
+
+[tasks.tidy-check]
+description = "fail if go.mod / go.sum are not tidy"
+run = "go mod tidy -diff"
+
 [tasks.vuln]
 description = "scan for known Go vulnerabilities"
 run = "govulncheck ./..."
 
 [tasks.check]
 description = "run everything CI runs"
-depends = ["lint", "test", "vuln"]
+depends = ["lint", "fmt-check", "tidy-check", "test", "vuln"]
