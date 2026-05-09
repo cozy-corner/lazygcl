@@ -23,7 +23,7 @@ run = "golangci-lint run ./..."
 
 [tasks.fmt]
 description = "format the codebase in place"
-run = ["gofmt -w .", "goimports -w ."]
+run = "goimports -w ."
 
 [tasks.vuln]
 description = "scan for known Go vulnerabilities"
