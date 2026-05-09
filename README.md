@@ -40,6 +40,8 @@ Project resolution order: `--project` flag → `GOOGLE_CLOUD_PROJECT` env → `g
 | `g` / `G` | Jump to top / bottom |
 | `Ctrl+R` | Open the resource type picker |
 | `Ctrl+L` | Open the logName picker |
+| In picker: `↑` / `↓`, `Ctrl+J` / `Ctrl+K`, `Ctrl+N` / `Ctrl+P` | Move cursor |
+| In picker: `Enter` | Accept the highlighted item |
 | `Esc` | Back (close detail / cancel picker) |
 | `q` / `Ctrl+C` | Quit |
 

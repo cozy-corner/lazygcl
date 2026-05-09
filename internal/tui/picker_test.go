@@ -126,6 +126,36 @@ func TestFilteredPickerItems_Fuzzy(t *testing.T) {
 	}
 }
 
+func TestHandlePickerKey_TextinputEditing(t *testing.T) {
+	cases := []struct {
+		name string
+		key  tea.KeyType
+		in   string
+		want string
+	}{
+		{"ctrl+w deletes last word", tea.KeyCtrlW, "k8s_container foo", "k8s_container "},
+		{"ctrl+u clears from cursor to start", tea.KeyCtrlU, "k8s_container", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ti := textinput.New()
+			ti.Focus()
+			ti.SetValue(c.in)
+			ti.SetCursor(len(c.in))
+			m := Model{currentView: viewPicker, pickerKind: pickerResource, pickerInput: ti}
+
+			out, _ := m.handlePickerKey(tea.KeyMsg{Type: c.key})
+			got, ok := out.(Model)
+			if !ok {
+				t.Fatalf("handlePickerKey returned %T, want Model", out)
+			}
+			if g := got.pickerInput.Value(); g != c.want {
+				t.Errorf("input = %q, want %q", g, c.want)
+			}
+		})
+	}
+}
+
 func TestResourceItems(t *testing.T) {
 	in := []gcp.ResourceDescriptor{
 		{Type: "gce_instance", DisplayName: "VM Instance"},
