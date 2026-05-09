@@ -226,7 +226,13 @@ func (m Model) renderMain() string {
 	if m.loading {
 		fmt.Fprintln(&b, dimStyle.Render("loading…"))
 	}
-	fmt.Fprintln(&b, dimStyle.Render("[tab] focus  [enter] run  [^R] resource.type  [^L] logName  [q] quit  project="+m.project))
+	var hints string
+	if m.focus == paneQuery {
+		hints = "[tab] focus  [enter] run  [^R] resource.type  [^L] logName  [^C] quit"
+	} else {
+		hints = "[tab] focus  [enter] open  [j/k] move  [g/G] top/bottom  [q] quit"
+	}
+	fmt.Fprintln(&b, dimStyle.Render(hints+"  project="+m.project))
 	return b.String()
 }
 
