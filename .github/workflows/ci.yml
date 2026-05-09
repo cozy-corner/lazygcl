@@ -20,4 +20,8 @@ jobs:
         with:
           install: true
           cache: true
-      - run: mise run check
+      - run: mise run lint
+      - run: mise run fmt-check
+      - run: mise run tidy-check
+      - run: mise run test
+      - run: mise run vuln
