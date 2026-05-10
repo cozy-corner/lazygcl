@@ -10,3 +10,6 @@ pre-commit:
         - "go.mod"
         - "go.sum"
       run: mise exec -- go mod tidy -diff
+    lint:
+      glob: "*.go"
+      run: mise exec -- golangci-lint run --new-from-rev=HEAD --fix=false ./...
