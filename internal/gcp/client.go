@@ -72,7 +72,7 @@ func (s *pagedStream) Next(_ context.Context) (LogEntry, error) {
 	}
 	if err != nil {
 		if isInvalidArgument(err) {
-			return LogEntry{}, fmt.Errorf("%w: %v", ErrInvalidFilter, err)
+			return LogEntry{}, fmt.Errorf("%w: %w", ErrInvalidFilter, err)
 		}
 		return LogEntry{}, err
 	}

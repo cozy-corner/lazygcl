@@ -149,21 +149,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.query.Blur()
 		}
 		return m, nil
-	case pickerLoadedMsg:
-		if m.currentView != viewPicker || msg.kind != m.pickerKind {
+	case pickerResourceLoadedMsg:
+		if m.currentView != viewPicker || m.pickerKind != pickerResource {
 			return m, nil
 		}
 		m.pickerLoading = false
-		switch msg.kind {
-		case pickerResource:
-			m.resourceDescriptors = msg.resources
-			m.pickerItems = resourceItems(msg.resources)
-		case pickerLogName:
-			m.pickerItems = logNameItems(msg.logNames)
-		case pickerResourceLabelsAll:
-			m.resourceDescriptors = msg.resources
-			m.pickerItems = labelKeyItems(unionLabels(msg.resources))
+		m.resourceDescriptors = msg.resources
+		m.pickerItems = resourceItems(msg.resources)
+		return m, nil
+	case pickerLogNameLoadedMsg:
+		if m.currentView != viewPicker || m.pickerKind != pickerLogName {
+			return m, nil
 		}
+		m.pickerLoading = false
+		m.pickerItems = logNameItems(msg.logNames)
+		return m, nil
+	case pickerResourceLabelsLoadedMsg:
+		if m.currentView != viewPicker || m.pickerKind != pickerResourceLabelsAll {
+			return m, nil
+		}
+		m.pickerLoading = false
+		m.resourceDescriptors = msg.resources
+		m.pickerItems = labelKeyItems(unionLabels(msg.resources))
 		return m, nil
 	case pickerErrMsg:
 		if m.currentView != viewPicker || msg.kind != m.pickerKind {
@@ -194,6 +201,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	switch m.currentView {
+	case viewMain:
+		return m.renderMain()
 	case viewDetail:
 		return m.renderDetail()
 	case viewPicker:
@@ -301,9 +310,10 @@ func payloadPreview(p gcp.Payload) string {
 	switch p.Kind {
 	case gcp.PayloadText:
 		return strings.ReplaceAll(p.Text, "\n", " ")
-	default:
+	case gcp.PayloadJSON, gcp.PayloadProto:
 		return strings.ReplaceAll(string(p.JSON), "\n", " ")
 	}
+	return ""
 }
 
 func truncate(s string, n int) string {
