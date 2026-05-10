@@ -342,8 +342,11 @@ func TestApplyFieldSelection_ResourceOpensSubFieldPicker(t *testing.T) {
 	if out.currentView != viewPicker {
 		t.Errorf("currentView = %v, want viewPicker (sub-field picker)", out.currentView)
 	}
-	if out.pickerKind != pickerResourceSubField {
-		t.Errorf("pickerKind = %v, want pickerResourceSubField", out.pickerKind)
+	if out.pickerKind != pickerObjectSubField {
+		t.Errorf("pickerKind = %v, want pickerObjectSubField", out.pickerKind)
+	}
+	if out.pickerObjectParent != "resource" {
+		t.Errorf("pickerObjectParent = %q, want %q", out.pickerObjectParent, "resource")
 	}
 	if cmd != nil {
 		t.Error("cmd = non-nil, want nil (sub-field picker is in-memory)")
@@ -357,12 +360,13 @@ func TestApplyResourceSubFieldSelection_TypeDispatchesToResourcePicker(t *testin
 	ta := textarea.New()
 	ti := textinput.New()
 	m := Model{
-		currentView:  viewPicker,
-		pickerKind:   pickerResourceSubField,
-		pickerItems:  []pickerItem{{Display: "type", FilterKey: "type", Value: "type"}},
-		pickerCursor: 0,
-		query:        ta,
-		pickerInput:  ti,
+		currentView:        viewPicker,
+		pickerKind:         pickerObjectSubField,
+		pickerObjectParent: "resource",
+		pickerItems:        []pickerItem{{Display: "type", FilterKey: "type", Value: "type"}},
+		pickerCursor:       0,
+		query:              ta,
+		pickerInput:        ti,
 	}
 	out, cmd := m.applyPickerSelection()
 	if out.pickerKind != pickerResource {
@@ -380,12 +384,13 @@ func TestApplyResourceSubFieldSelection_LabelsDispatchesToLabelsAllPicker(t *tes
 	ta := textarea.New()
 	ti := textinput.New()
 	m := Model{
-		currentView:  viewPicker,
-		pickerKind:   pickerResourceSubField,
-		pickerItems:  []pickerItem{{Display: "labels", FilterKey: "labels", Value: "labels"}},
-		pickerCursor: 0,
-		query:        ta,
-		pickerInput:  ti,
+		currentView:        viewPicker,
+		pickerKind:         pickerObjectSubField,
+		pickerObjectParent: "resource",
+		pickerItems:        []pickerItem{{Display: "labels", FilterKey: "labels", Value: "labels"}},
+		pickerCursor:       0,
+		query:              ta,
+		pickerInput:        ti,
 	}
 	out, cmd := m.applyPickerSelection()
 	if out.pickerKind != pickerResourceLabelsAll {
@@ -396,6 +401,133 @@ func TestApplyResourceSubFieldSelection_LabelsDispatchesToLabelsAllPicker(t *tes
 	}
 	if cmd == nil {
 		t.Error("cmd = nil, want non-nil fetch Cmd")
+	}
+}
+
+func TestApplyFieldSelection_HttpRequestOpensSubFieldPicker(t *testing.T) {
+	m := fieldPickerModelWithSelection("httpRequest")
+	out, cmd := m.applyPickerSelection()
+	if out.currentView != viewPicker {
+		t.Errorf("currentView = %v, want viewPicker", out.currentView)
+	}
+	if out.pickerKind != pickerObjectSubField {
+		t.Errorf("pickerKind = %v, want pickerObjectSubField", out.pickerKind)
+	}
+	if out.pickerObjectParent != "httpRequest" {
+		t.Errorf("pickerObjectParent = %q, want %q", out.pickerObjectParent, "httpRequest")
+	}
+	if cmd != nil {
+		t.Error("cmd = non-nil, want nil (sub-field picker is in-memory)")
+	}
+	if got, want := len(out.pickerItems), len(objectSubFields["httpRequest"]); got != want {
+		t.Errorf("sub-field items len = %d, want %d", got, want)
+	}
+}
+
+func TestApplyHttpRequestSubFieldSelection_StatusInsertsSkeletonUnquoted(t *testing.T) {
+	ta := textarea.New()
+	ta.SetWidth(200)
+	ti := textinput.New()
+	m := Model{
+		currentView:        viewPicker,
+		pickerKind:         pickerObjectSubField,
+		pickerObjectParent: "httpRequest",
+		pickerItems:        []pickerItem{{Display: "status", FilterKey: "status", Value: "status"}},
+		pickerCursor:       0,
+		query:              ta,
+		pickerInput:        ti,
+	}
+	out, _ := m.applyPickerSelection()
+	if out.currentView != viewMain {
+		t.Errorf("currentView = %v, want viewMain", out.currentView)
+	}
+	want := `httpRequest.status >= `
+	if got := out.query.Value(); got != want {
+		t.Errorf("query = %q, want %q", got, want)
+	}
+	out.query.InsertRune('5')
+	wantAfter := `httpRequest.status >= 5`
+	if got := out.query.Value(); got != wantAfter {
+		t.Errorf("after InsertRune, query = %q, want %q (cursor at end-of-line for unquoted)", got, wantAfter)
+	}
+}
+
+func TestApplyHttpRequestSubFieldSelection_RequestUrlInsertsSkeletonQuoted(t *testing.T) {
+	ta := textarea.New()
+	ta.SetWidth(200)
+	ti := textinput.New()
+	m := Model{
+		currentView:        viewPicker,
+		pickerKind:         pickerObjectSubField,
+		pickerObjectParent: "httpRequest",
+		pickerItems:        []pickerItem{{Display: "requestUrl", FilterKey: "requesturl", Value: "requestUrl"}},
+		pickerCursor:       0,
+		query:              ta,
+		pickerInput:        ti,
+	}
+	out, _ := m.applyPickerSelection()
+	want := `httpRequest.requestUrl =~ ""`
+	if got := out.query.Value(); got != want {
+		t.Errorf("query = %q, want %q", got, want)
+	}
+	out.query.InsertRune('X')
+	wantAfter := `httpRequest.requestUrl =~ "X"`
+	if got := out.query.Value(); got != wantAfter {
+		t.Errorf("after InsertRune, query = %q, want %q (cursor between quotes)", got, wantAfter)
+	}
+}
+
+func TestApplyHttpRequestSubFieldSelection_RequestMethodChainsToEnumPicker(t *testing.T) {
+	ta := textarea.New()
+	ti := textinput.New()
+	m := Model{
+		currentView:        viewPicker,
+		pickerKind:         pickerObjectSubField,
+		pickerObjectParent: "httpRequest",
+		pickerItems:        []pickerItem{{Display: "requestMethod", FilterKey: "requestmethod", Value: "requestMethod"}},
+		pickerCursor:       0,
+		query:              ta,
+		pickerInput:        ti,
+	}
+	out, _ := m.applyPickerSelection()
+	if out.currentView != viewPicker {
+		t.Errorf("currentView = %v, want viewPicker (enum chain)", out.currentView)
+	}
+	if out.pickerKind != pickerEnumValue {
+		t.Errorf("pickerKind = %v, want pickerEnumValue", out.pickerKind)
+	}
+	if out.pickerEnumField != "httpRequest.requestMethod" {
+		t.Errorf("pickerEnumField = %q, want %q", out.pickerEnumField, "httpRequest.requestMethod")
+	}
+	if out.pickerEnumOp != "=" || !out.pickerEnumQuoted {
+		t.Errorf("enum ctx = (op=%q, quoted=%v), want (=, true)", out.pickerEnumOp, out.pickerEnumQuoted)
+	}
+	if len(out.pickerItems) != len(httpRequestMethods) {
+		t.Errorf("enum item count = %d, want %d", len(out.pickerItems), len(httpRequestMethods))
+	}
+}
+
+func TestApplyHttpRequestSubFieldSelection_CacheHitChainsToEnumPickerUnquoted(t *testing.T) {
+	ta := textarea.New()
+	ti := textinput.New()
+	m := Model{
+		currentView:        viewPicker,
+		pickerKind:         pickerObjectSubField,
+		pickerObjectParent: "httpRequest",
+		pickerItems:        []pickerItem{{Display: "cacheHit", FilterKey: "cachehit", Value: "cacheHit"}},
+		pickerCursor:       0,
+		query:              ta,
+		pickerInput:        ti,
+	}
+	out, _ := m.applyPickerSelection()
+	if out.pickerKind != pickerEnumValue {
+		t.Errorf("pickerKind = %v, want pickerEnumValue", out.pickerKind)
+	}
+	if out.pickerEnumField != "httpRequest.cacheHit" {
+		t.Errorf("pickerEnumField = %q, want %q", out.pickerEnumField, "httpRequest.cacheHit")
+	}
+	if out.pickerEnumQuoted {
+		t.Error("pickerEnumQuoted = true, want false for bool sub-field")
 	}
 }
 
