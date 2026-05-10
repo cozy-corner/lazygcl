@@ -26,10 +26,11 @@ const (
 	// field (e.g. severity levels). The field/op/quoting are carried on
 	// Model.pickerEnum* so the same picker kind serves multiple fields.
 	pickerEnumValue
-	// pickerResourceSubField is the second step under the `resource`
-	// top-level object: pick `type` (→ resource value picker) or `labels`
-	// (→ pickerResourceLabelsAll).
-	pickerResourceSubField
+	// pickerObjectSubField is the second step under any top-level object
+	// (resource, httpRequest, ...). The current parent is carried on
+	// Model.pickerObjectParent so dispatch knows which object's schema to
+	// look up.
+	pickerObjectSubField
 	// pickerResourceLabelsAll lists label keys de-duplicated across the
 	// global resource-descriptor catalog. Selection inserts a
 	// `resource.labels.<key> = ""` skeleton.
@@ -48,9 +49,9 @@ func (k pickerKind) title() string {
 		return "Label key"
 	case pickerEnumValue:
 		return "Value"
-	case pickerResourceSubField:
-		return "Resource sub-field"
 	}
+	// pickerObjectSubField has no static title — renderPicker composes
+	// "<parent> sub-field" using m.pickerObjectParent.
 	return ""
 }
 
@@ -86,20 +87,57 @@ var severityLevels = []string{
 	"DEBUG", "INFO", "NOTICE", "WARNING", "ERROR", "CRITICAL", "ALERT", "EMERGENCY",
 }
 
+var httpRequestMethods = []string{
+	"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS",
+}
+
+var boolEnumValues = []string{"true", "false"}
+
 // topLevelFields lists LogEntry top-level fields lazygcl exposes via the
 // field picker. Object-typed fields use fieldObjectSubPicker so sub-fields
 // (e.g. resource.type) are reached through their parent.
 var topLevelFields = []fieldDef{
 	{path: "logName", op: "=", quoted: true, strategy: fieldDynamicValues},
 	{path: "resource", strategy: fieldObjectSubPicker},
+	{path: "httpRequest", strategy: fieldObjectSubPicker},
 	{path: "severity", op: ">=", quoted: true, strategy: fieldEnumValues, enumValues: severityLevels},
 	{path: "timestamp", op: ">=", quoted: true, strategy: fieldSkeleton},
 	{path: "receiveTimestamp", op: ">=", quoted: true, strategy: fieldSkeleton},
 	{path: "trace", op: "=", quoted: true, strategy: fieldSkeleton},
 	{path: "spanId", op: "=", quoted: true, strategy: fieldSkeleton},
 	{path: "insertId", op: "=", quoted: true, strategy: fieldSkeleton},
-	{path: "traceSampled", op: "=", quoted: false, strategy: fieldEnumValues, enumValues: []string{"true", "false"}},
+	{path: "traceSampled", op: "=", quoted: false, strategy: fieldEnumValues, enumValues: boolEnumValues},
 	{path: "textPayload", op: "=~", quoted: true, strategy: fieldSkeleton},
+}
+
+// objectSubFields maps a top-level object's path to the schema of its
+// queryable sub-fields. Sub-field selection in pickerObjectSubField looks up
+// the selected entry here and dispatches by strategy. Resource's two
+// sub-fields are special-cased in applyObjectSubFieldSelection because they
+// route to dynamic API-backed pickers; their entries here exist only to
+// drive the picker's item list.
+var objectSubFields = map[string][]fieldDef{
+	"resource": {
+		{path: "type", strategy: fieldDynamicValues},
+		{path: "labels", strategy: fieldDynamicValues},
+	},
+	"httpRequest": {
+		{path: "requestMethod", op: "=", quoted: true, strategy: fieldEnumValues, enumValues: httpRequestMethods},
+		{path: "status", op: ">=", quoted: false, strategy: fieldSkeleton},
+		{path: "requestUrl", op: "=~", quoted: true, strategy: fieldSkeleton},
+		{path: "userAgent", op: "=~", quoted: true, strategy: fieldSkeleton},
+		{path: "remoteIp", op: "=", quoted: true, strategy: fieldSkeleton},
+		{path: "serverIp", op: "=", quoted: true, strategy: fieldSkeleton},
+		{path: "referer", op: "=", quoted: true, strategy: fieldSkeleton},
+		{path: "latency", op: ">", quoted: true, strategy: fieldSkeleton},
+		{path: "protocol", op: "=", quoted: true, strategy: fieldSkeleton},
+		{path: "requestSize", op: ">=", quoted: false, strategy: fieldSkeleton},
+		{path: "responseSize", op: ">=", quoted: false, strategy: fieldSkeleton},
+		{path: "cacheLookup", op: "=", quoted: false, strategy: fieldEnumValues, enumValues: boolEnumValues},
+		{path: "cacheHit", op: "=", quoted: false, strategy: fieldEnumValues, enumValues: boolEnumValues},
+		{path: "cacheValidatedWithOriginServer", op: "=", quoted: false, strategy: fieldEnumValues, enumValues: boolEnumValues},
+		{path: "cacheFillBytes", op: ">=", quoted: false, strategy: fieldSkeleton},
+	},
 }
 
 func fieldByPath(path string) *fieldDef {
@@ -310,8 +348,14 @@ func (m Model) filteredPickerItems() []int {
 
 func (m Model) renderPicker() string {
 	var b strings.Builder
+	var titleStr string
+	if m.pickerKind == pickerObjectSubField {
+		titleStr = m.pickerObjectParent + " sub-field"
+	} else {
+		titleStr = strings.ToLower(m.pickerKind.title())
+	}
 	header := fmt.Sprintf("Select %s — type to filter, enter to select, esc to cancel",
-		strings.ToLower(m.pickerKind.title()))
+		titleStr)
 	fmt.Fprintln(&b, headerStyle.Render(header))
 	fmt.Fprintln(&b, m.pickerInput.View())
 
@@ -434,15 +478,53 @@ func (m Model) applyPickerSelection() (Model, tea.Cmd) {
 		m.appendEnumValueClause(item.Value)
 		return m.closePicker(), nil
 
-	case pickerResourceSubField:
-		switch item.Value {
+	case pickerObjectSubField:
+		return m.applyObjectSubFieldSelection(item.Value)
+	}
+	return m, nil
+}
+
+// applyObjectSubFieldSelection dispatches when the user picks a sub-field
+// within a top-level object (resource, httpRequest, ...). The parent path
+// is read from m.pickerObjectParent. Resource's two sub-fields are
+// special-cased because they route to API-backed pickers; everything else
+// uses the strategy on the sub-field's fieldDef in objectSubFields.
+func (m Model) applyObjectSubFieldSelection(subPath string) (Model, tea.Cmd) {
+	parent := m.pickerObjectParent
+	if parent == "resource" {
+		switch subPath {
 		case "type":
 			return m.openPicker(pickerResource)
 		case "labels":
 			return m.openPicker(pickerResourceLabelsAll)
 		}
 	}
-	return m, nil
+	fields := objectSubFields[parent]
+	var sub *fieldDef
+	for i := range fields {
+		if fields[i].path == subPath {
+			sub = &fields[i]
+			break
+		}
+	}
+	if sub == nil {
+		return m.closePicker(), nil
+	}
+	fullPath := parent + "." + sub.path
+	switch sub.strategy {
+	case fieldEnumValues:
+		f := &fieldDef{
+			path:       fullPath,
+			op:         sub.op,
+			quoted:     sub.quoted,
+			enumValues: sub.enumValues,
+		}
+		return m.openEnumValuePicker(f), nil
+	case fieldSkeleton:
+		m.appendSkeletonClause(fullPath, sub.op, sub.quoted)
+		return m.closePicker(), nil
+	}
+	return m.closePicker(), nil
 }
 
 // applyFieldSelection dispatches based on the selected field's strategy.
@@ -462,32 +544,39 @@ func (m Model) applyFieldSelection(path string) (Model, tea.Cmd) {
 		m.appendSkeletonClause(f.path, f.op, f.quoted)
 		return m.closePicker(), nil
 	case fieldObjectSubPicker:
-		if f.path == "resource" {
-			return m.openResourceSubFieldPicker(), nil
-		}
+		return m.openObjectSubFieldPicker(f.path), nil
 	}
 	return m.closePicker(), nil
 }
 
-// openResourceSubFieldPicker opens a 2-item picker (type / labels) so the
-// user can choose which sub-field of the top-level `resource` object to
-// filter on.
-func (m Model) openResourceSubFieldPicker() Model {
+// openObjectSubFieldPicker opens the sub-field picker for the given
+// top-level object. Items come from objectSubFields[parentPath]; the parent
+// is stashed on the model so applyObjectSubFieldSelection can look up the
+// chosen sub-field's strategy.
+func (m Model) openObjectSubFieldPicker(parentPath string) Model {
 	ti := textinput.New()
 	ti.Placeholder = "filter…"
 	ti.Focus()
 
-	m.currentView = viewPicker
-	m.pickerKind = pickerResourceSubField
-	m.pickerInput = ti
-	m.pickerItems = []pickerItem{
-		{Display: "type", FilterKey: "type", Value: "type"},
-		{Display: "labels", FilterKey: "labels", Value: "labels"},
+	fields := objectSubFields[parentPath]
+	items := make([]pickerItem, 0, len(fields))
+	for _, f := range fields {
+		items = append(items, pickerItem{
+			Display:   f.path,
+			FilterKey: strings.ToLower(f.path),
+			Value:     f.path,
+		})
 	}
+
+	m.currentView = viewPicker
+	m.pickerKind = pickerObjectSubField
+	m.pickerInput = ti
+	m.pickerItems = items
 	m.pickerCursor = 0
 	m.pickerOffset = 0
 	m.pickerLoading = false
 	m.pickerErr = nil
+	m.pickerObjectParent = parentPath
 	return m
 }
 
