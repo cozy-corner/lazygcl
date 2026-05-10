@@ -65,6 +65,13 @@ type Model struct {
 	pickerOffset  int
 	pickerLoading bool
 	pickerErr     error
+
+	// Context for pickerEnumValue: which field's enum is being picked, and
+	// how to format the resulting clause. Set by openEnumValuePicker, read
+	// by applyPickerSelection.
+	pickerEnumField  string
+	pickerEnumOp     string
+	pickerEnumQuoted bool
 }
 
 type Options struct {
@@ -141,6 +148,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pickerItems = resourceItems(msg.resources)
 		case pickerLogName:
 			m.pickerItems = logNameItems(msg.logNames)
+		case pickerResourceLabelsAll:
+			m.pickerItems = labelKeyItems(unionLabels(msg.resources))
 		}
 		return m, nil
 	case pickerErrMsg:
@@ -228,7 +237,7 @@ func (m Model) renderMain() string {
 	}
 	var hints string
 	if m.focus == paneQuery {
-		hints = "[tab] focus  [enter] run  [^R] resource.type  [^L] logName  [^C] quit"
+		hints = "[tab] focus  [enter] run  [^F] field  [^C] quit"
 	} else {
 		hints = "[tab] focus  [enter] open  [j/k] move  [g/G] top/bottom  [q] quit"
 	}
