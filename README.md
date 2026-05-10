@@ -44,10 +44,11 @@ Project resolution order: `--project` flag → `GOOGLE_CLOUD_PROJECT` env → `g
 | `Esc` | Back (close detail / cancel picker) |
 | `q` / `Ctrl+C` | Quit |
 
-`Ctrl+F` opens a single field picker listing the LogEntry top-level fields you can filter on (`logName`, `resource`, `severity`, `timestamp`, `trace`, `spanId`, `insertId`, `traceSampled`, `textPayload`, `receiveTimestamp`). Selecting a field then dispatches:
+`Ctrl+F` opens a single field picker listing the LogEntry top-level fields you can filter on (`logName`, `resource`, `httpRequest`, `severity`, `timestamp`, `trace`, `spanId`, `insertId`, `traceSampled`, `textPayload`, `receiveTimestamp`). Selecting a field then dispatches:
 
 - `logName` → API-backed value picker.
 - `resource` → sub-field picker (`type` / `labels`). `type` opens the resource value picker (e.g. `cloud_run_revision`). `labels` opens a label-key picker over the union of label keys across all resource types.
+- `httpRequest` → sub-field picker over its 15 fields, dispatching per type: `requestMethod` to a method enum, `cacheHit` / `cacheLookup` / `cacheValidatedWithOriginServer` to a bool enum, numeric fields (`status`, `requestSize`, ...) and string fields (`requestUrl`, `userAgent`, `latency`, ...) to a skeleton with the appropriate operator.
 - `severity` / `traceSampled` → hardcoded enum value picker.
 - Other fields → insert `<field> <op> ""` skeleton with the cursor between the quotes so you can type the value directly.
 
