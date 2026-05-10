@@ -38,14 +38,20 @@ Project resolution order: `--project` flag → `GOOGLE_CLOUD_PROJECT` env → `g
 | `Enter` (in results) | Open the entry's detail view |
 | `j` / `k`, `↑` / `↓` | Move cursor |
 | `g` / `G` | Jump to top / bottom |
-| `Ctrl+R` | Open the resource type picker |
-| `Ctrl+L` | Open the logName picker |
+| `Ctrl+F` | Open the field picker (top-level LogEntry fields) |
 | In picker: `↑` / `↓`, `Ctrl+J` / `Ctrl+K`, `Ctrl+N` / `Ctrl+P` | Move cursor |
 | In picker: `Enter` | Accept the highlighted item |
 | `Esc` | Back (close detail / cancel picker) |
 | `q` / `Ctrl+C` | Quit |
 
-Both pickers support fzf-style fuzzy filtering: `gci` matches `gce_instance`, `run` matches `cloud_run_revision`, and so on. The resource type picker lists every monitored resource type Cloud Logging knows about (global catalog) — picking one that isn't producing logs in your project just yields an empty result. The logName picker lists names that actually have entries in the bound project.
+`Ctrl+F` opens a single field picker listing the LogEntry top-level fields you can filter on (`logName`, `resource`, `severity`, `timestamp`, `trace`, `spanId`, `insertId`, `traceSampled`, `textPayload`, `receiveTimestamp`). Selecting a field then dispatches:
+
+- `logName` → API-backed value picker.
+- `resource` → sub-field picker (`type` / `labels`). `type` opens the resource value picker (e.g. `cloud_run_revision`). `labels` opens a label-key picker over the union of label keys across all resource types.
+- `severity` / `traceSampled` → hardcoded enum value picker.
+- Other fields → insert `<field> <op> ""` skeleton with the cursor between the quotes so you can type the value directly.
+
+All pickers support fzf-style fuzzy filtering: `gci` matches `gce_instance`, `run` matches `cloud_run_revision`, and so on. The resource type picker lists every monitored resource type Cloud Logging knows about (global catalog) — picking one that isn't producing logs in your project just yields an empty result. The logName picker lists names that actually have entries in the bound project.
 
 Auto-paging fires when the cursor is near the end of the loaded results.
 

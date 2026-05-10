@@ -100,10 +100,15 @@ func (c *Client) ListResourceDescriptors(ctx context.Context) ([]ResourceDescrip
 		if err != nil {
 			return nil, fmt.Errorf("listing resource descriptors: %w", err)
 		}
+		labels := make([]LabelDescriptor, 0, len(rd.Labels))
+		for _, l := range rd.Labels {
+			labels = append(labels, LabelDescriptor{Key: l.Key, Description: l.Description})
+		}
 		out = append(out, ResourceDescriptor{
 			Type:        rd.Type,
 			DisplayName: rd.DisplayName,
 			Description: rd.Description,
+			Labels:      labels,
 		})
 	}
 	return out, nil

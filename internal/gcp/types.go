@@ -50,4 +50,13 @@ type ResourceDescriptor struct {
 	Type        string
 	DisplayName string
 	Description string
+	Labels      []LabelDescriptor
+}
+
+// LabelDescriptor mirrors the fields of label.LabelDescriptor that lazygcl
+// surfaces in the label-key picker. Labels come for free with
+// ListMonitoredResourceDescriptors so no extra API call is needed.
+type LabelDescriptor struct {
+	Key         string
+	Description string
 }
