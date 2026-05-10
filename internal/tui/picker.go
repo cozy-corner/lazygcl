@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -14,17 +15,124 @@ import (
 type pickerKind int
 
 const (
-	pickerResource pickerKind = iota
+	// pickerField is the single entry point: a list of LogEntry top-level
+	// fields the user can filter on. Selecting one dispatches per-field
+	// (dynamic value picker, enum value picker, sub-field picker, or
+	// skeleton insertion).
+	pickerField pickerKind = iota
+	pickerResource
 	pickerLogName
+	// pickerEnumValue picks among hardcoded enum values for a specific
+	// field (e.g. severity levels). The field/op/quoting are carried on
+	// Model.pickerEnum* so the same picker kind serves multiple fields.
+	pickerEnumValue
+	// pickerResourceSubField is the second step under the `resource`
+	// top-level object: pick `type` (→ resource value picker) or `labels`
+	// (→ pickerResourceLabelsAll).
+	pickerResourceSubField
+	// pickerResourceLabelsAll lists label keys de-duplicated across the
+	// global resource-descriptor catalog. Selection inserts a
+	// `resource.labels.<key> = ""` skeleton.
+	pickerResourceLabelsAll
 )
 
 func (k pickerKind) title() string {
 	switch k {
+	case pickerField:
+		return "Field"
 	case pickerResource:
 		return "Resource type"
-	default:
+	case pickerLogName:
 		return "Log name"
+	case pickerResourceLabelsAll:
+		return "Label key"
+	case pickerEnumValue:
+		return "Value"
+	case pickerResourceSubField:
+		return "Resource sub-field"
 	}
+	return ""
+}
+
+// fieldStrategy enumerates how the field picker dispatches when an item is
+// selected.
+type fieldStrategy int
+
+const (
+	// fieldDynamicValues opens an API-backed value picker (logName).
+	fieldDynamicValues fieldStrategy = iota
+	// fieldEnumValues opens a hardcoded enum value picker (severity,
+	// traceSampled).
+	fieldEnumValues
+	// fieldSkeleton inserts `<path> <op> ""` and positions the cursor for
+	// the user to type the value (trace, timestamp, ...).
+	fieldSkeleton
+	// fieldObjectSubPicker opens a sub-field picker for an object-typed
+	// top-level field (resource → type / labels).
+	fieldObjectSubPicker
+)
+
+// fieldDef describes a queryable LogEntry top-level field surfaced in the
+// field picker. Quoted=false produces unquoted values, e.g. for bool.
+type fieldDef struct {
+	path       string
+	op         string
+	quoted     bool
+	strategy   fieldStrategy
+	enumValues []string
+}
+
+var severityLevels = []string{
+	"DEBUG", "INFO", "NOTICE", "WARNING", "ERROR", "CRITICAL", "ALERT", "EMERGENCY",
+}
+
+// topLevelFields lists LogEntry top-level fields lazygcl exposes via the
+// field picker. Object-typed fields use fieldObjectSubPicker so sub-fields
+// (e.g. resource.type) are reached through their parent.
+var topLevelFields = []fieldDef{
+	{path: "logName", op: "=", quoted: true, strategy: fieldDynamicValues},
+	{path: "resource", strategy: fieldObjectSubPicker},
+	{path: "severity", op: ">=", quoted: true, strategy: fieldEnumValues, enumValues: severityLevels},
+	{path: "timestamp", op: ">=", quoted: true, strategy: fieldSkeleton},
+	{path: "receiveTimestamp", op: ">=", quoted: true, strategy: fieldSkeleton},
+	{path: "trace", op: "=", quoted: true, strategy: fieldSkeleton},
+	{path: "spanId", op: "=", quoted: true, strategy: fieldSkeleton},
+	{path: "insertId", op: "=", quoted: true, strategy: fieldSkeleton},
+	{path: "traceSampled", op: "=", quoted: false, strategy: fieldEnumValues, enumValues: []string{"true", "false"}},
+	{path: "textPayload", op: "=~", quoted: true, strategy: fieldSkeleton},
+}
+
+func fieldByPath(path string) *fieldDef {
+	for i := range topLevelFields {
+		if topLevelFields[i].path == path {
+			return &topLevelFields[i]
+		}
+	}
+	return nil
+}
+
+func fieldItems() []pickerItem {
+	out := make([]pickerItem, 0, len(topLevelFields))
+	for _, f := range topLevelFields {
+		out = append(out, pickerItem{
+			Display:   f.path,
+			FilterKey: strings.ToLower(f.path),
+			Value:     f.path,
+		})
+	}
+	return out
+}
+
+func enumValueItems(values []string) []pickerItem {
+	out := make([]pickerItem, 0, len(values))
+	for _, v := range values {
+		out = append(out, pickerItem{
+			Display:   v,
+			FilterKey: strings.ToLower(v),
+			Value:     v,
+		})
+	}
+	return out
 }
 
 // pickerItem is the unified picker row. Display is shown to the user;
@@ -36,8 +144,8 @@ type pickerItem struct {
 	Value     string
 }
 
-// openPicker resets the picker UI to a loading state and returns the Cmd that
-// fetches its items.
+// openPicker resets the picker UI and returns a Cmd to fetch its items if
+// API-backed, or nil for in-memory pickers (pickerField).
 func (m Model) openPicker(kind pickerKind) (Model, tea.Cmd) {
 	ti := textinput.New()
 	ti.Placeholder = "filter…"
@@ -49,12 +157,21 @@ func (m Model) openPicker(kind pickerKind) (Model, tea.Cmd) {
 	m.pickerItems = nil
 	m.pickerCursor = 0
 	m.pickerOffset = 0
-	m.pickerLoading = true
 	m.pickerErr = nil
 
 	client := m.client
 	switch kind {
+	case pickerField:
+		m.pickerItems = fieldItems()
+		m.pickerLoading = false
+		return m, nil
 	case pickerResource:
+		if m.resourceDescriptors != nil {
+			m.pickerItems = resourceItems(m.resourceDescriptors)
+			m.pickerLoading = false
+			return m, nil
+		}
+		m.pickerLoading = true
 		return m, func() tea.Msg {
 			rs, err := client.ListResourceDescriptors(m.ctx)
 			if err != nil {
@@ -62,7 +179,8 @@ func (m Model) openPicker(kind pickerKind) (Model, tea.Cmd) {
 			}
 			return pickerLoadedMsg{kind: kind, resources: rs}
 		}
-	default:
+	case pickerLogName:
+		m.pickerLoading = true
 		return m, func() tea.Msg {
 			ns, err := client.ListLogNames(m.ctx)
 			if err != nil {
@@ -70,7 +188,41 @@ func (m Model) openPicker(kind pickerKind) (Model, tea.Cmd) {
 			}
 			return pickerLoadedMsg{kind: kind, logNames: ns}
 		}
+	case pickerResourceLabelsAll:
+		if m.resourceDescriptors != nil {
+			m.pickerItems = labelKeyItems(unionLabels(m.resourceDescriptors))
+			m.pickerLoading = false
+			return m, nil
+		}
+		m.pickerLoading = true
+		return m, func() tea.Msg {
+			rs, err := client.ListResourceDescriptors(m.ctx)
+			if err != nil {
+				return pickerErrMsg{kind: kind, err: err}
+			}
+			return pickerLoadedMsg{kind: kind, resources: rs}
+		}
 	}
+	return m, nil
+}
+
+// unionLabels returns the de-duplicated union of label descriptors across
+// all resource descriptors, sorted by key.
+func unionLabels(rs []gcp.ResourceDescriptor) []gcp.LabelDescriptor {
+	seen := map[string]gcp.LabelDescriptor{}
+	for _, r := range rs {
+		for _, l := range r.Labels {
+			if _, ok := seen[l.Key]; !ok {
+				seen[l.Key] = l
+			}
+		}
+	}
+	out := make([]gcp.LabelDescriptor, 0, len(seen))
+	for _, l := range seen {
+		out = append(out, l)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out
 }
 
 func resourceItems(rs []gcp.ResourceDescriptor) []pickerItem {
@@ -84,6 +236,22 @@ func resourceItems(rs []gcp.ResourceDescriptor) []pickerItem {
 			Display:   display,
 			FilterKey: strings.ToLower(r.Type + " " + r.DisplayName),
 			Value:     r.Type,
+		})
+	}
+	return out
+}
+
+func labelKeyItems(labels []gcp.LabelDescriptor) []pickerItem {
+	out := make([]pickerItem, 0, len(labels))
+	for _, l := range labels {
+		display := l.Key
+		if l.Description != "" {
+			display = fmt.Sprintf("%-24s %s", l.Key, l.Description)
+		}
+		out = append(out, pickerItem{
+			Display:   display,
+			FilterKey: strings.ToLower(l.Key + " " + l.Description),
+			Value:     l.Key,
 		})
 	}
 	return out
@@ -245,25 +413,160 @@ func (m Model) applyPickerSelection() (Model, tea.Cmd) {
 		return m, nil
 	}
 	item := m.pickerItems[indices[m.pickerCursor]]
-	clause := pickerClause(m.pickerKind, item.Value)
 
+	switch m.pickerKind {
+	case pickerField:
+		return m.applyFieldSelection(item.Value)
+
+	case pickerResource:
+		m.appendQueryClause(fmt.Sprintf(`resource.type = %q`, item.Value))
+		return m.closePicker(), nil
+
+	case pickerLogName:
+		m.appendQueryClause(fmt.Sprintf(`logName = %q`, item.Value))
+		return m.closePicker(), nil
+
+	case pickerResourceLabelsAll:
+		m.appendSkeletonClause(fmt.Sprintf("resource.labels.%s", item.Value), "=", true)
+		return m.closePicker(), nil
+
+	case pickerEnumValue:
+		m.appendEnumValueClause(item.Value)
+		return m.closePicker(), nil
+
+	case pickerResourceSubField:
+		switch item.Value {
+		case "type":
+			return m.openPicker(pickerResource)
+		case "labels":
+			return m.openPicker(pickerResourceLabelsAll)
+		}
+	}
+	return m, nil
+}
+
+// applyFieldSelection dispatches based on the selected field's strategy.
+func (m Model) applyFieldSelection(path string) (Model, tea.Cmd) {
+	f := fieldByPath(path)
+	if f == nil {
+		return m.closePicker(), nil
+	}
+	switch f.strategy {
+	case fieldDynamicValues:
+		if f.path == "logName" {
+			return m.openPicker(pickerLogName)
+		}
+	case fieldEnumValues:
+		return m.openEnumValuePicker(f), nil
+	case fieldSkeleton:
+		m.appendSkeletonClause(f.path, f.op, f.quoted)
+		return m.closePicker(), nil
+	case fieldObjectSubPicker:
+		if f.path == "resource" {
+			return m.openResourceSubFieldPicker(), nil
+		}
+	}
+	return m.closePicker(), nil
+}
+
+// openResourceSubFieldPicker opens a 2-item picker (type / labels) so the
+// user can choose which sub-field of the top-level `resource` object to
+// filter on.
+func (m Model) openResourceSubFieldPicker() Model {
+	ti := textinput.New()
+	ti.Placeholder = "filter…"
+	ti.Focus()
+
+	m.currentView = viewPicker
+	m.pickerKind = pickerResourceSubField
+	m.pickerInput = ti
+	m.pickerItems = []pickerItem{
+		{Display: "type", FilterKey: "type", Value: "type"},
+		{Display: "labels", FilterKey: "labels", Value: "labels"},
+	}
+	m.pickerCursor = 0
+	m.pickerOffset = 0
+	m.pickerLoading = false
+	m.pickerErr = nil
+	return m
+}
+
+// closePicker returns to the main view and re-focuses the query pane.
+func (m Model) closePicker() Model {
+	m.currentView = viewMain
+	m.focus = paneQuery
+	m.query.Focus()
+	return m
+}
+
+// openEnumValuePicker opens an enum value picker for a field with hardcoded
+// values (severity, traceSampled). The field metadata is stashed on the
+// model so applyPickerSelection can format the clause.
+func (m Model) openEnumValuePicker(f *fieldDef) Model {
+	ti := textinput.New()
+	ti.Placeholder = "filter…"
+	ti.Focus()
+
+	m.currentView = viewPicker
+	m.pickerKind = pickerEnumValue
+	m.pickerInput = ti
+	m.pickerItems = enumValueItems(f.enumValues)
+	m.pickerCursor = 0
+	m.pickerOffset = 0
+	m.pickerLoading = false
+	m.pickerErr = nil
+
+	m.pickerEnumField = f.path
+	m.pickerEnumOp = f.op
+	m.pickerEnumQuoted = f.quoted
+	return m
+}
+
+// appendQueryClause appends a fully-formed clause, joining with AND if the
+// query already has content. Cursor lands at the end of the appended text.
+func (m *Model) appendQueryClause(clause string) {
 	existing := strings.TrimSpace(m.query.Value())
 	if existing == "" {
 		m.query.SetValue(clause)
 	} else {
 		m.query.SetValue(existing + "\nAND " + clause)
 	}
-	m.currentView = viewMain
-	m.focus = paneQuery
-	m.query.Focus()
-	return m, nil
 }
 
-func pickerClause(kind pickerKind, value string) string {
-	switch kind {
-	case pickerResource:
-		return fmt.Sprintf(`resource.type = %q`, value)
-	default:
-		return fmt.Sprintf(`logName = %q`, value)
+// appendSkeletonClause inserts `<path> <op> ""` (or `<path> <op> ` if
+// unquoted) and positions the cursor where the user types the value —
+// between the two quotes for quoted forms, at end-of-line for unquoted.
+func (m *Model) appendSkeletonClause(path, op string, quoted bool) {
+	var clause string
+	if quoted {
+		clause = fmt.Sprintf(`%s %s ""`, path, op)
+	} else {
+		clause = fmt.Sprintf(`%s %s `, path, op)
 	}
+	existing := strings.TrimSpace(m.query.Value())
+	var lastLine string
+	if existing == "" {
+		lastLine = clause
+		m.query.SetValue(clause)
+	} else {
+		lastLine = "AND " + clause
+		m.query.SetValue(existing + "\nAND " + clause)
+	}
+	if quoted {
+		m.query.SetCursor(len([]rune(lastLine)) - 1)
+	} else {
+		m.query.SetCursor(len([]rune(lastLine)))
+	}
+}
+
+// appendEnumValueClause inserts the enum value picked for the field
+// previously stashed on the model by openEnumValuePicker.
+func (m *Model) appendEnumValueClause(value string) {
+	var clause string
+	if m.pickerEnumQuoted {
+		clause = fmt.Sprintf(`%s %s %q`, m.pickerEnumField, m.pickerEnumOp, value)
+	} else {
+		clause = fmt.Sprintf(`%s %s %s`, m.pickerEnumField, m.pickerEnumOp, value)
+	}
+	m.appendQueryClause(clause)
 }

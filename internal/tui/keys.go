@@ -12,10 +12,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleDetailKey(msg)
 	}
 	switch msg.Type {
-	case tea.KeyCtrlR:
-		return m.openPicker(pickerResource)
-	case tea.KeyCtrlL:
-		return m.openPicker(pickerLogName)
+	case tea.KeyCtrlF:
+		return m.openPicker(pickerField)
 	}
 	if m.focus == paneQuery {
 		return m.handleQueryKey(msg)

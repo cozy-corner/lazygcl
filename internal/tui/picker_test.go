@@ -9,37 +9,26 @@ import (
 	"github.com/cozy-corner/lazygcl/internal/gcp"
 )
 
-// TestHandleKey_OpensPickers verifies that Ctrl+R / Ctrl+L from the main
-// view switch currentView to viewPicker with the right kind. The Cmd that
-// fetches items is intentionally not invoked here — that path requires a
-// live gcp.Client.
-func TestHandleKey_OpensPickers(t *testing.T) {
-	cases := []struct {
-		name string
-		key  tea.KeyType
-		want pickerKind
-	}{
-		{"resource", tea.KeyCtrlR, pickerResource},
-		{"logName", tea.KeyCtrlL, pickerLogName},
+// TestHandleKey_OpensFieldPicker verifies Ctrl+F from the main view opens
+// the in-memory field picker.
+func TestHandleKey_OpensFieldPicker(t *testing.T) {
+	m := Model{currentView: viewMain, focus: paneQuery}
+	out, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlF})
+	got, ok := out.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want Model", out)
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			m := Model{currentView: viewMain, focus: paneQuery}
-			out, _ := m.handleKey(tea.KeyMsg{Type: c.key})
-			got, ok := out.(Model)
-			if !ok {
-				t.Fatalf("handleKey returned %T, want Model", out)
-			}
-			if got.currentView != viewPicker {
-				t.Errorf("currentView = %v, want viewPicker", got.currentView)
-			}
-			if got.pickerKind != c.want {
-				t.Errorf("pickerKind = %v, want %v", got.pickerKind, c.want)
-			}
-			if !got.pickerLoading {
-				t.Error("pickerLoading = false, want true (fetch in flight)")
-			}
-		})
+	if got.currentView != viewPicker {
+		t.Errorf("currentView = %v, want viewPicker", got.currentView)
+	}
+	if got.pickerKind != pickerField {
+		t.Errorf("pickerKind = %v, want pickerField", got.pickerKind)
+	}
+	if got.pickerLoading {
+		t.Error("pickerLoading = true, want false (field picker is in-memory)")
+	}
+	if len(got.pickerItems) == 0 {
+		t.Error("pickerItems is empty, want top-level fields")
 	}
 }
 
@@ -167,5 +156,337 @@ func TestResourceItems(t *testing.T) {
 	}
 	if got[0].Value != "gce_instance" || got[1].Value != "k8s_container" {
 		t.Errorf("values = %q,%q", got[0].Value, got[1].Value)
+	}
+}
+
+func TestApplyPickerSelection_ResourceTypeClosesPicker(t *testing.T) {
+	ta := textarea.New()
+	ti := textinput.New()
+	m := Model{
+		currentView:  viewPicker,
+		pickerKind:   pickerResource,
+		pickerItems:  []pickerItem{{Display: "cloud_run_revision", FilterKey: "cloud_run_revision", Value: "cloud_run_revision"}},
+		pickerCursor: 0,
+		query:        ta,
+		pickerInput:  ti,
+	}
+	out, _ := m.applyPickerSelection()
+	if out.currentView != viewMain {
+		t.Errorf("currentView = %v, want viewMain", out.currentView)
+	}
+	if got := out.query.Value(); got != `resource.type = "cloud_run_revision"` {
+		t.Errorf("query = %q, want resource.type clause", got)
+	}
+}
+
+func TestLabelKeyItems(t *testing.T) {
+	in := []gcp.LabelDescriptor{
+		{Key: "service_name", Description: "The name of the service"},
+		{Key: "location"},
+	}
+	got := labelKeyItems(in)
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2", len(got))
+	}
+	if got[0].Value != "service_name" || got[1].Value != "location" {
+		t.Errorf("values = %q,%q", got[0].Value, got[1].Value)
+	}
+}
+
+// fieldPickerModelWithSelection builds a model whose pickerField items
+// contain a single item for `path` so applyPickerSelection picks it.
+func fieldPickerModelWithSelection(path string) Model {
+	ta := textarea.New()
+	ta.SetWidth(200)
+	ti := textinput.New()
+	return Model{
+		currentView:  viewPicker,
+		pickerKind:   pickerField,
+		pickerItems:  []pickerItem{{Display: path, FilterKey: path, Value: path}},
+		pickerCursor: 0,
+		query:        ta,
+		pickerInput:  ti,
+	}
+}
+
+func TestApplyFieldSelection_SkeletonInsertsClauseWithCursor(t *testing.T) {
+	m := fieldPickerModelWithSelection("trace")
+	out, _ := m.applyPickerSelection()
+	if out.currentView != viewMain {
+		t.Errorf("currentView = %v, want viewMain", out.currentView)
+	}
+	want := `trace = ""`
+	if got := out.query.Value(); got != want {
+		t.Errorf("query = %q, want %q", got, want)
+	}
+	out.query.InsertRune('X')
+	if got := out.query.Value(); got != `trace = "X"` {
+		t.Errorf("after InsertRune, query = %q, want trace = \"X\" (cursor not between quotes)", got)
+	}
+}
+
+func TestApplyFieldSelection_TimestampUsesGreaterEqual(t *testing.T) {
+	m := fieldPickerModelWithSelection("timestamp")
+	out, _ := m.applyPickerSelection()
+	want := `timestamp >= ""`
+	if got := out.query.Value(); got != want {
+		t.Errorf("query = %q, want %q", got, want)
+	}
+}
+
+func TestApplyFieldSelection_TextPayloadUsesRegexOp(t *testing.T) {
+	m := fieldPickerModelWithSelection("textPayload")
+	out, _ := m.applyPickerSelection()
+	want := `textPayload =~ ""`
+	if got := out.query.Value(); got != want {
+		t.Errorf("query = %q, want %q", got, want)
+	}
+}
+
+func TestApplyFieldSelection_SeverityChainsIntoEnumPicker(t *testing.T) {
+	m := fieldPickerModelWithSelection("severity")
+	out, _ := m.applyPickerSelection()
+	if out.currentView != viewPicker {
+		t.Errorf("currentView = %v, want viewPicker (enum chain)", out.currentView)
+	}
+	if out.pickerKind != pickerEnumValue {
+		t.Errorf("pickerKind = %v, want pickerEnumValue", out.pickerKind)
+	}
+	if len(out.pickerItems) != len(severityLevels) {
+		t.Errorf("enum item count = %d, want %d", len(out.pickerItems), len(severityLevels))
+	}
+	if out.pickerEnumField != "severity" || out.pickerEnumOp != ">=" || !out.pickerEnumQuoted {
+		t.Errorf("enum ctx = (%q, %q, quoted=%v), want (severity, >=, true)",
+			out.pickerEnumField, out.pickerEnumOp, out.pickerEnumQuoted)
+	}
+	if out.query.Value() != "" {
+		t.Errorf("query = %q, want empty (no clause inserted until value chosen)", out.query.Value())
+	}
+}
+
+func TestApplyFieldSelection_TraceSampledChainsIntoEnumPickerUnquoted(t *testing.T) {
+	m := fieldPickerModelWithSelection("traceSampled")
+	out, _ := m.applyPickerSelection()
+	if out.pickerKind != pickerEnumValue {
+		t.Errorf("pickerKind = %v, want pickerEnumValue", out.pickerKind)
+	}
+	if out.pickerEnumQuoted {
+		t.Error("pickerEnumQuoted = true, want false for traceSampled (bool)")
+	}
+}
+
+func TestApplyEnumValueSelection_SeverityInsertsClause(t *testing.T) {
+	ta := textarea.New()
+	ta.SetWidth(200)
+	ti := textinput.New()
+	m := Model{
+		currentView:      viewPicker,
+		pickerKind:       pickerEnumValue,
+		pickerItems:      []pickerItem{{Display: "ERROR", FilterKey: "error", Value: "ERROR"}},
+		pickerCursor:     0,
+		query:            ta,
+		pickerInput:      ti,
+		pickerEnumField:  "severity",
+		pickerEnumOp:     ">=",
+		pickerEnumQuoted: true,
+	}
+	out, _ := m.applyPickerSelection()
+	want := `severity >= "ERROR"`
+	if got := out.query.Value(); got != want {
+		t.Errorf("query = %q, want %q", got, want)
+	}
+	if out.currentView != viewMain {
+		t.Errorf("currentView = %v, want viewMain", out.currentView)
+	}
+}
+
+func TestApplyEnumValueSelection_TraceSampledUnquoted(t *testing.T) {
+	ta := textarea.New()
+	ta.SetWidth(200)
+	ti := textinput.New()
+	m := Model{
+		currentView:      viewPicker,
+		pickerKind:       pickerEnumValue,
+		pickerItems:      []pickerItem{{Display: "true", FilterKey: "true", Value: "true"}},
+		pickerCursor:     0,
+		query:            ta,
+		pickerInput:      ti,
+		pickerEnumField:  "traceSampled",
+		pickerEnumOp:     "=",
+		pickerEnumQuoted: false,
+	}
+	out, _ := m.applyPickerSelection()
+	want := `traceSampled = true`
+	if got := out.query.Value(); got != want {
+		t.Errorf("query = %q, want %q", got, want)
+	}
+}
+
+func TestApplyFieldSelection_LogNameDispatchesToDynamicPicker(t *testing.T) {
+	m := fieldPickerModelWithSelection("logName")
+	out, cmd := m.applyPickerSelection()
+	if out.pickerKind != pickerLogName {
+		t.Errorf("pickerKind = %v, want pickerLogName", out.pickerKind)
+	}
+	if !out.pickerLoading {
+		t.Error("pickerLoading = false, want true (API fetch in flight)")
+	}
+	if cmd == nil {
+		t.Error("cmd = nil, want non-nil fetch Cmd")
+	}
+}
+
+func TestApplyFieldSelection_ResourceOpensSubFieldPicker(t *testing.T) {
+	m := fieldPickerModelWithSelection("resource")
+	out, cmd := m.applyPickerSelection()
+	if out.currentView != viewPicker {
+		t.Errorf("currentView = %v, want viewPicker (sub-field picker)", out.currentView)
+	}
+	if out.pickerKind != pickerResourceSubField {
+		t.Errorf("pickerKind = %v, want pickerResourceSubField", out.pickerKind)
+	}
+	if cmd != nil {
+		t.Error("cmd = non-nil, want nil (sub-field picker is in-memory)")
+	}
+	if len(out.pickerItems) != 2 {
+		t.Errorf("sub-field items len = %d, want 2 (type + labels)", len(out.pickerItems))
+	}
+}
+
+func TestApplyResourceSubFieldSelection_TypeDispatchesToResourcePicker(t *testing.T) {
+	ta := textarea.New()
+	ti := textinput.New()
+	m := Model{
+		currentView:  viewPicker,
+		pickerKind:   pickerResourceSubField,
+		pickerItems:  []pickerItem{{Display: "type", FilterKey: "type", Value: "type"}},
+		pickerCursor: 0,
+		query:        ta,
+		pickerInput:  ti,
+	}
+	out, cmd := m.applyPickerSelection()
+	if out.pickerKind != pickerResource {
+		t.Errorf("pickerKind = %v, want pickerResource", out.pickerKind)
+	}
+	if !out.pickerLoading {
+		t.Error("pickerLoading = false, want true (API fetch in flight)")
+	}
+	if cmd == nil {
+		t.Error("cmd = nil, want non-nil fetch Cmd")
+	}
+}
+
+func TestApplyResourceSubFieldSelection_LabelsDispatchesToLabelsAllPicker(t *testing.T) {
+	ta := textarea.New()
+	ti := textinput.New()
+	m := Model{
+		currentView:  viewPicker,
+		pickerKind:   pickerResourceSubField,
+		pickerItems:  []pickerItem{{Display: "labels", FilterKey: "labels", Value: "labels"}},
+		pickerCursor: 0,
+		query:        ta,
+		pickerInput:  ti,
+	}
+	out, cmd := m.applyPickerSelection()
+	if out.pickerKind != pickerResourceLabelsAll {
+		t.Errorf("pickerKind = %v, want pickerResourceLabelsAll", out.pickerKind)
+	}
+	if !out.pickerLoading {
+		t.Error("pickerLoading = false, want true")
+	}
+	if cmd == nil {
+		t.Error("cmd = nil, want non-nil fetch Cmd")
+	}
+}
+
+func TestApplyPickerSelection_LabelsAllInsertsClauseWithCursor(t *testing.T) {
+	ta := textarea.New()
+	ta.SetWidth(200)
+	ti := textinput.New()
+	m := Model{
+		currentView:  viewPicker,
+		pickerKind:   pickerResourceLabelsAll,
+		pickerItems:  []pickerItem{{Display: "service_name", FilterKey: "service_name", Value: "service_name"}},
+		pickerCursor: 0,
+		query:        ta,
+		pickerInput:  ti,
+	}
+	out, _ := m.applyPickerSelection()
+	want := `resource.labels.service_name = ""`
+	if got := out.query.Value(); got != want {
+		t.Errorf("query = %q, want %q", got, want)
+	}
+	out.query.InsertRune('X')
+	wantAfter := `resource.labels.service_name = "X"`
+	if got := out.query.Value(); got != wantAfter {
+		t.Errorf("after InsertRune, query = %q, want %q", got, wantAfter)
+	}
+}
+
+func TestUnionLabels_Dedup(t *testing.T) {
+	rs := []gcp.ResourceDescriptor{
+		{Type: "cloud_run_revision", Labels: []gcp.LabelDescriptor{{Key: "service_name"}, {Key: "location"}}},
+		{Type: "gce_instance", Labels: []gcp.LabelDescriptor{{Key: "instance_id"}, {Key: "location"}}},
+	}
+	got := unionLabels(rs)
+	keys := make([]string, len(got))
+	for i, l := range got {
+		keys[i] = l.Key
+	}
+	want := []string{"instance_id", "location", "service_name"}
+	if len(keys) != len(want) {
+		t.Fatalf("union len = %d, want %d (deduped & sorted)", len(keys), len(want))
+	}
+	for i := range want {
+		if keys[i] != want[i] {
+			t.Errorf("keys[%d] = %q, want %q (sorted)", i, keys[i], want[i])
+		}
+	}
+}
+
+func TestFieldItems_CoversAllCatalog(t *testing.T) {
+	got := fieldItems()
+	if len(got) != len(topLevelFields) {
+		t.Errorf("fieldItems len = %d, want %d", len(got), len(topLevelFields))
+	}
+	for i, f := range topLevelFields {
+		if got[i].Value != f.path {
+			t.Errorf("fieldItems[%d].Value = %q, want %q", i, got[i].Value, f.path)
+		}
+	}
+}
+
+func TestOpenPicker_ResourceUsesCacheWhenAvailable(t *testing.T) {
+	cached := []gcp.ResourceDescriptor{
+		{Type: "cloud_run_revision", Labels: []gcp.LabelDescriptor{{Key: "service_name"}}},
+	}
+	m := Model{resourceDescriptors: cached}
+	out, cmd := m.openPicker(pickerResource)
+	if cmd != nil {
+		t.Error("cmd = non-nil, want nil (cache hit should skip the fetch Cmd)")
+	}
+	if out.pickerLoading {
+		t.Error("pickerLoading = true, want false (no fetch in flight)")
+	}
+	if len(out.pickerItems) != 1 || out.pickerItems[0].Value != "cloud_run_revision" {
+		t.Errorf("pickerItems = %+v, want one item with Value=cloud_run_revision", out.pickerItems)
+	}
+}
+
+func TestOpenPicker_LabelsAllUsesCacheWhenAvailable(t *testing.T) {
+	cached := []gcp.ResourceDescriptor{
+		{Type: "cloud_run_revision", Labels: []gcp.LabelDescriptor{{Key: "service_name"}, {Key: "location"}}},
+		{Type: "gce_instance", Labels: []gcp.LabelDescriptor{{Key: "instance_id"}, {Key: "location"}}},
+	}
+	m := Model{resourceDescriptors: cached}
+	out, cmd := m.openPicker(pickerResourceLabelsAll)
+	if cmd != nil {
+		t.Error("cmd = non-nil, want nil (cache hit should skip the fetch Cmd)")
+	}
+	if out.pickerLoading {
+		t.Error("pickerLoading = true, want false")
+	}
+	if len(out.pickerItems) != 3 {
+		t.Errorf("pickerItems len = %d, want 3 (deduped union of 4 keys → 3)", len(out.pickerItems))
 	}
 }
