@@ -166,6 +166,11 @@ func (m Model) openPicker(kind pickerKind) (Model, tea.Cmd) {
 		m.pickerLoading = false
 		return m, nil
 	case pickerResource:
+		if m.resourceDescriptors != nil {
+			m.pickerItems = resourceItems(m.resourceDescriptors)
+			m.pickerLoading = false
+			return m, nil
+		}
 		m.pickerLoading = true
 		return m, func() tea.Msg {
 			rs, err := client.ListResourceDescriptors(m.ctx)
@@ -184,6 +189,11 @@ func (m Model) openPicker(kind pickerKind) (Model, tea.Cmd) {
 			return pickerLoadedMsg{kind: kind, logNames: ns}
 		}
 	case pickerResourceLabelsAll:
+		if m.resourceDescriptors != nil {
+			m.pickerItems = labelKeyItems(unionLabels(m.resourceDescriptors))
+			m.pickerLoading = false
+			return m, nil
+		}
 		m.pickerLoading = true
 		return m, func() tea.Msg {
 			rs, err := client.ListResourceDescriptors(m.ctx)

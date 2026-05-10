@@ -455,3 +455,38 @@ func TestFieldItems_CoversAllCatalog(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenPicker_ResourceUsesCacheWhenAvailable(t *testing.T) {
+	cached := []gcp.ResourceDescriptor{
+		{Type: "cloud_run_revision", Labels: []gcp.LabelDescriptor{{Key: "service_name"}}},
+	}
+	m := Model{resourceDescriptors: cached}
+	out, cmd := m.openPicker(pickerResource)
+	if cmd != nil {
+		t.Error("cmd = non-nil, want nil (cache hit should skip the fetch Cmd)")
+	}
+	if out.pickerLoading {
+		t.Error("pickerLoading = true, want false (no fetch in flight)")
+	}
+	if len(out.pickerItems) != 1 || out.pickerItems[0].Value != "cloud_run_revision" {
+		t.Errorf("pickerItems = %+v, want one item with Value=cloud_run_revision", out.pickerItems)
+	}
+}
+
+func TestOpenPicker_LabelsAllUsesCacheWhenAvailable(t *testing.T) {
+	cached := []gcp.ResourceDescriptor{
+		{Type: "cloud_run_revision", Labels: []gcp.LabelDescriptor{{Key: "service_name"}, {Key: "location"}}},
+		{Type: "gce_instance", Labels: []gcp.LabelDescriptor{{Key: "instance_id"}, {Key: "location"}}},
+	}
+	m := Model{resourceDescriptors: cached}
+	out, cmd := m.openPicker(pickerResourceLabelsAll)
+	if cmd != nil {
+		t.Error("cmd = non-nil, want nil (cache hit should skip the fetch Cmd)")
+	}
+	if out.pickerLoading {
+		t.Error("pickerLoading = true, want false")
+	}
+	if len(out.pickerItems) != 3 {
+		t.Errorf("pickerItems len = %d, want 3 (deduped union of 4 keys → 3)", len(out.pickerItems))
+	}
+}
