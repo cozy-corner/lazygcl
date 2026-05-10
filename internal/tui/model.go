@@ -73,6 +73,11 @@ type Model struct {
 	pickerEnumOp     string
 	pickerEnumQuoted bool
 
+	// Context for pickerObjectSubField: which top-level object's sub-fields
+	// are being shown. Set by openObjectSubFieldPicker, read by
+	// applyPickerSelection to look up the selected sub-field's strategy.
+	pickerObjectParent string
+
 	// resourceDescriptors caches ListResourceDescriptors so the resource
 	// type picker and the resource labels-all picker share one fetch.
 	// The catalog is global and effectively immutable, so a session-long
