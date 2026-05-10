@@ -3,7 +3,21 @@ version: "2"
 linters:
   enable:
     - depguard
+    - errorlint
+    - exhaustive
+    - bodyclose
+    - noctx
+    - nilerr
+    - predeclared
+    - forcetypeassert
+    - gocheckcompilerdirectives
+    - unconvert
+    - misspell
   settings:
+    exhaustive:
+      # tea.KeyType is an open enum from bubbletea with dozens of values; we
+      # dispatch on a handful intentionally, not exhaustively.
+      ignore-enum-types: "tea\\.KeyType"
     depguard:
       rules:
         gcp-layer:

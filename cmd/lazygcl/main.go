@@ -25,13 +25,13 @@ func main() {
 		return
 	}
 
-	resolved, err := resolveProject(*project)
+	ctx := context.Background()
+	resolved, err := resolveProject(ctx, *project)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "lazygcl:", err)
 		os.Exit(1)
 	}
 
-	ctx := context.Background()
 	client, err := gcp.NewClient(ctx, resolved)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "lazygcl: failed to create logging client:", err)
@@ -48,14 +48,14 @@ func main() {
 
 // resolveProject picks a project ID from the flag, then GOOGLE_CLOUD_PROJECT,
 // then `gcloud config get-value project`. Returns an error if none yields a value.
-func resolveProject(flagVal string) (string, error) {
+func resolveProject(ctx context.Context, flagVal string) (string, error) {
 	if flagVal != "" {
 		return flagVal, nil
 	}
 	if env := os.Getenv("GOOGLE_CLOUD_PROJECT"); env != "" {
 		return env, nil
 	}
-	out, err := exec.Command("gcloud", "config", "get-value", "project").Output()
+	out, err := exec.CommandContext(ctx, "gcloud", "config", "get-value", "project").Output()
 	if err == nil {
 		if id := strings.TrimSpace(string(out)); id != "" && id != "(unset)" {
 			return id, nil
