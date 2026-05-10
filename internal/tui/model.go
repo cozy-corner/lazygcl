@@ -72,6 +72,12 @@ type Model struct {
 	pickerEnumField  string
 	pickerEnumOp     string
 	pickerEnumQuoted bool
+
+	// resourceDescriptors caches ListResourceDescriptors so the resource
+	// type picker and the resource labels-all picker share one fetch.
+	// The catalog is global and effectively immutable, so a session-long
+	// cache is safe.
+	resourceDescriptors []gcp.ResourceDescriptor
 }
 
 type Options struct {
@@ -145,10 +151,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pickerLoading = false
 		switch msg.kind {
 		case pickerResource:
+			m.resourceDescriptors = msg.resources
 			m.pickerItems = resourceItems(msg.resources)
 		case pickerLogName:
 			m.pickerItems = logNameItems(msg.logNames)
 		case pickerResourceLabelsAll:
+			m.resourceDescriptors = msg.resources
 			m.pickerItems = labelKeyItems(unionLabels(msg.resources))
 		}
 		return m, nil
