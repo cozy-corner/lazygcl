@@ -4,12 +4,19 @@ import (
 	"github.com/cozy-corner/lazygcl/internal/gcp"
 )
 
-// pickerLoadedMsg delivers items for the picker view. Either Resources or
-// LogNames is populated depending on which kind was requested.
-type pickerLoadedMsg struct {
-	kind      pickerKind
+// One loaded message per API-backed picker kind. The message type itself
+// identifies which picker the payload belongs to, so Update dispatches via
+// the outer type switch.
+type pickerResourceLoadedMsg struct {
 	resources []gcp.ResourceDescriptor
-	logNames  []string
+}
+
+type pickerLogNameLoadedMsg struct {
+	logNames []string
+}
+
+type pickerResourceLabelsLoadedMsg struct {
+	resources []gcp.ResourceDescriptor
 }
 
 // pickerErrMsg surfaces a load failure for the picker.

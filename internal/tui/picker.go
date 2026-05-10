@@ -37,22 +37,15 @@ const (
 	pickerResourceLabelsAll
 )
 
-func (k pickerKind) title() string {
-	switch k {
-	case pickerField:
-		return "Field"
-	case pickerResource:
-		return "Resource type"
-	case pickerLogName:
-		return "Log name"
-	case pickerResourceLabelsAll:
-		return "Label key"
-	case pickerEnumValue:
-		return "Value"
-	}
-	// pickerObjectSubField has no static title — renderPicker composes
-	// "<parent> sub-field" using m.pickerObjectParent.
-	return ""
+// pickerTitles holds the static header label for each picker kind.
+// pickerObjectSubField is absent — renderPicker composes its title dynamically
+// from m.pickerObjectParent.
+var pickerTitles = map[pickerKind]string{
+	pickerField:             "Field",
+	pickerResource:          "Resource type",
+	pickerLogName:           "Log name",
+	pickerResourceLabelsAll: "Label key",
+	pickerEnumValue:         "Value",
 }
 
 // fieldStrategy enumerates how the field picker dispatches when an item is
@@ -215,7 +208,7 @@ func (m Model) openPicker(kind pickerKind) (Model, tea.Cmd) {
 			if err != nil {
 				return pickerErrMsg{kind: kind, err: err}
 			}
-			return pickerLoadedMsg{kind: kind, resources: rs}
+			return pickerResourceLoadedMsg{resources: rs}
 		}
 	case pickerLogName:
 		m.pickerLoading = true
@@ -224,7 +217,7 @@ func (m Model) openPicker(kind pickerKind) (Model, tea.Cmd) {
 			if err != nil {
 				return pickerErrMsg{kind: kind, err: err}
 			}
-			return pickerLoadedMsg{kind: kind, logNames: ns}
+			return pickerLogNameLoadedMsg{logNames: ns}
 		}
 	case pickerResourceLabelsAll:
 		if m.resourceDescriptors != nil {
@@ -238,8 +231,10 @@ func (m Model) openPicker(kind pickerKind) (Model, tea.Cmd) {
 			if err != nil {
 				return pickerErrMsg{kind: kind, err: err}
 			}
-			return pickerLoadedMsg{kind: kind, resources: rs}
+			return pickerResourceLabelsLoadedMsg{resources: rs}
 		}
+	case pickerEnumValue, pickerObjectSubField:
+		// Opened via openEnumValuePicker / openObjectSubFieldPicker.
 	}
 	return m, nil
 }
@@ -352,7 +347,7 @@ func (m Model) renderPicker() string {
 	if m.pickerKind == pickerObjectSubField {
 		titleStr = m.pickerObjectParent + " sub-field"
 	} else {
-		titleStr = strings.ToLower(m.pickerKind.title())
+		titleStr = strings.ToLower(pickerTitles[m.pickerKind])
 	}
 	header := fmt.Sprintf("Select %s — type to filter, enter to select, esc to cancel",
 		titleStr)
@@ -523,6 +518,8 @@ func (m Model) applyObjectSubFieldSelection(subPath string) (Model, tea.Cmd) {
 	case fieldSkeleton:
 		m.appendSkeletonClause(fullPath, sub.op, sub.quoted)
 		return m.closePicker(), nil
+	case fieldDynamicValues, fieldObjectSubPicker:
+		// Top-level strategies only.
 	}
 	return m.closePicker(), nil
 }

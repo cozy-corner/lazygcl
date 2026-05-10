@@ -11,8 +11,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.currentView == viewDetail {
 		return m.handleDetailKey(msg)
 	}
-	switch msg.Type {
-	case tea.KeyCtrlF:
+	if msg.Type == tea.KeyCtrlF {
 		return m.openPicker(pickerField)
 	}
 	if m.focus == paneQuery {
