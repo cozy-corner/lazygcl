@@ -12,18 +12,7 @@ All Go and lint tooling versions are pinned in `.mise.toml`. After cloning, run 
 
 Use the `mise run` wrappers — they pin tool versions matching CI. Calling `go`, `golangci-lint`, etc. directly may use whatever is on your `$PATH` instead.
 
-```sh
-mise run build      # go build -o lazygcl ./cmd/lazygcl
-mise run test       # go test -race ./...
-mise run lint       # golangci-lint run ./...
-mise run fmt        # goimports -w .
-mise run fmt-check  # fail if any file needs goimports
-mise run tidy-check # fail if go.mod / go.sum are not tidy
-mise run vuln       # govulncheck ./...
-mise run check      # everything CI runs (lint + fmt-check + tidy-check + test + vuln)
-```
-
-CI runs `mise run check` and nothing else — keep the two in sync.
+Run `mise tasks` to see the available tasks (defined in `.mise.toml`). CI runs `mise run check` and nothing else — that's the single gate to pass locally before opening a PR.
 
 ## Architecture
 
