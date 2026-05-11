@@ -49,7 +49,7 @@ Project resolution order: `--project` flag → `GOOGLE_CLOUD_PROJECT` env → `g
 - **Dynamic value picker** — values fetched live from Cloud Logging (e.g. `logName`, resource types, label keys).
 - **Object sub-picker** — drills into a nested object (e.g. `resource`, `httpRequest`) and dispatches by strategy on the chosen sub-field.
 - **Enum picker** — picks from a fixed value list (severities, bools, HTTP methods).
-- **Skeleton** — inserts `<field> <op> ""` with the cursor between the quotes so you can type the value directly.
+- **Skeleton** — inserts `<field> <op> ""` (unquoted for numeric fields) with the cursor positioned for the value.
 
 All pickers support fzf-style fuzzy filtering: `gci` matches `gce_instance`, `run` matches `cloud_run_revision`, and so on. The resource type picker lists every monitored resource type Cloud Logging knows about (global catalog) — picking one that isn't producing logs in your project just yields an empty result. The logName picker lists names that actually have entries in the bound project.
 
