@@ -90,16 +90,7 @@ mise install        # installs all tools pinned in .mise.toml
 mise run install    # installs the lefthook pre-commit hook (see lefthook.yml for what it runs)
 ```
 
-Common tasks (see `.mise.toml` for the full list and exact commands; everything below runs with the pinned tool versions):
-
-```sh
-mise run build      # build the lazygcl binary
-mise run test       # run tests with the race detector
-mise run lint       # run static analysis
-mise run fmt        # format the codebase in place
-mise run vuln       # scan for known vulnerabilities
-mise run check      # everything CI runs
-```
+Run `mise tasks` to see available tasks (defined in `.mise.toml`). CI runs `mise run check` — pass that locally before opening a PR.
 
 ## License
 
