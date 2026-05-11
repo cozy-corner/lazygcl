@@ -44,13 +44,12 @@ Project resolution order: `--project` flag → `GOOGLE_CLOUD_PROJECT` env → `g
 | `Esc` | Back (close detail / cancel picker) |
 | `q` / `Ctrl+C` | Quit |
 
-`Ctrl+F` opens a single field picker listing the LogEntry top-level fields you can filter on (`logName`, `resource`, `httpRequest`, `severity`, `timestamp`, `trace`, `spanId`, `insertId`, `traceSampled`, `textPayload`, `receiveTimestamp`). Selecting a field then dispatches:
+`Ctrl+F` opens a single picker over the LogEntry top-level fields you can filter on. Selecting a field dispatches by strategy:
 
-- `logName` → API-backed value picker.
-- `resource` → sub-field picker (`type` / `labels`). `type` opens the resource value picker (e.g. `cloud_run_revision`). `labels` opens a label-key picker over the union of label keys across all resource types.
-- `httpRequest` → sub-field picker over its 15 fields, dispatching per type: `requestMethod` to a method enum, `cacheHit` / `cacheLookup` / `cacheValidatedWithOriginServer` to a bool enum, numeric fields (`status`, `requestSize`, ...) and string fields (`requestUrl`, `userAgent`, `latency`, ...) to a skeleton with the appropriate operator.
-- `severity` / `traceSampled` → hardcoded enum value picker.
-- Other fields → insert `<field> <op> ""` skeleton with the cursor between the quotes so you can type the value directly.
+- **Dynamic value picker** — values fetched live from Cloud Logging (e.g. `logName`, resource types, label keys).
+- **Object sub-picker** — drills into a nested object (e.g. `resource`, `httpRequest`) and dispatches by strategy on the chosen sub-field.
+- **Enum picker** — picks from a fixed value list (severities, bools, HTTP methods).
+- **Skeleton** — inserts `<field> <op> ""` with the cursor between the quotes so you can type the value directly.
 
 All pickers support fzf-style fuzzy filtering: `gci` matches `gce_instance`, `run` matches `cloud_run_revision`, and so on. The resource type picker lists every monitored resource type Cloud Logging knows about (global catalog) — picking one that isn't producing logs in your project just yields an empty result. The logName picker lists names that actually have entries in the bound project.
 
@@ -87,19 +86,19 @@ v1 is read-only history queries. Live tail (`entries.tail`) is planned for v2. T
 Toolchain pinned via [mise](https://mise.jdx.dev/). After cloning:
 
 ```sh
-mise install        # installs go, golangci-lint, lefthook, goimports, govulncheck at the pinned versions
-mise run install    # wires up lefthook pre-commit hooks (gofmt + goimports auto-format)
+mise install        # installs all tools pinned in .mise.toml
+mise run install    # installs the lefthook pre-commit hook (see lefthook.yml for what it runs)
 ```
 
-Common tasks (defined in `.mise.toml`, run with the pinned tool versions):
+Common tasks (see `.mise.toml` for the full list and exact commands; everything below runs with the pinned tool versions):
 
 ```sh
-mise run build      # go build
-mise run test       # go test ./...
-mise run lint       # golangci-lint run ./...
-mise run fmt        # in-place gofmt + goimports
-mise run vuln       # govulncheck ./...
-mise run check      # lint + test + vuln
+mise run build      # build the lazygcl binary
+mise run test       # run tests with the race detector
+mise run lint       # run static analysis
+mise run fmt        # format the codebase in place
+mise run vuln       # scan for known vulnerabilities
+mise run check      # everything CI runs
 ```
 
 ## License
