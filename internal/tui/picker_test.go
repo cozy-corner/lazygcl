@@ -622,3 +622,138 @@ func TestOpenPicker_LabelsAllUsesCacheWhenAvailable(t *testing.T) {
 		t.Errorf("pickerItems len = %d, want 3 (deduped union of 4 keys → 3)", len(out.pickerItems))
 	}
 }
+
+func TestApplyFieldSelection_OperationOpensSubFieldPicker(t *testing.T) {
+	m := fieldPickerModelWithSelection("operation")
+	out, cmd := m.applyPickerSelection()
+	if out.currentView != viewPicker {
+		t.Errorf("currentView = %v, want viewPicker", out.currentView)
+	}
+	if out.pickerKind != pickerObjectSubField {
+		t.Errorf("pickerKind = %v, want pickerObjectSubField", out.pickerKind)
+	}
+	if out.pickerObjectParent != "operation" {
+		t.Errorf("pickerObjectParent = %q, want %q", out.pickerObjectParent, "operation")
+	}
+	if cmd != nil {
+		t.Error("cmd = non-nil, want nil (sub-field picker is in-memory)")
+	}
+	if got, want := len(out.pickerItems), len(objectSubFields["operation"]); got != want {
+		t.Errorf("sub-field items len = %d, want %d", got, want)
+	}
+}
+
+func TestApplyOperationSubFieldSelection_FirstChainsToEnumPickerUnquoted(t *testing.T) {
+	ta := textarea.New()
+	ti := textinput.New()
+	m := Model{
+		currentView:        viewPicker,
+		pickerKind:         pickerObjectSubField,
+		pickerObjectParent: "operation",
+		pickerItems:        []pickerItem{{Display: "first", FilterKey: "first", Value: "first"}},
+		pickerCursor:       0,
+		query:              ta,
+		pickerInput:        ti,
+	}
+	out, _ := m.applyPickerSelection()
+	if out.pickerKind != pickerEnumValue {
+		t.Errorf("pickerKind = %v, want pickerEnumValue", out.pickerKind)
+	}
+	if out.pickerEnumField != "operation.first" {
+		t.Errorf("pickerEnumField = %q, want %q", out.pickerEnumField, "operation.first")
+	}
+	if out.pickerEnumQuoted {
+		t.Error("pickerEnumQuoted = true, want false for bool sub-field")
+	}
+	if len(out.pickerItems) != len(boolEnumValues) {
+		t.Errorf("enum item count = %d, want %d", len(out.pickerItems), len(boolEnumValues))
+	}
+}
+
+func TestApplyFieldSelection_SourceLocationOpensSubFieldPicker(t *testing.T) {
+	m := fieldPickerModelWithSelection("sourceLocation")
+	out, cmd := m.applyPickerSelection()
+	if out.pickerKind != pickerObjectSubField {
+		t.Errorf("pickerKind = %v, want pickerObjectSubField", out.pickerKind)
+	}
+	if out.pickerObjectParent != "sourceLocation" {
+		t.Errorf("pickerObjectParent = %q, want %q", out.pickerObjectParent, "sourceLocation")
+	}
+	if cmd != nil {
+		t.Error("cmd = non-nil, want nil (sub-field picker is in-memory)")
+	}
+	if got, want := len(out.pickerItems), len(objectSubFields["sourceLocation"]); got != want {
+		t.Errorf("sub-field items len = %d, want %d", got, want)
+	}
+}
+
+func TestApplySourceLocationSubFieldSelection_LineInsertsSkeletonUnquoted(t *testing.T) {
+	ta := textarea.New()
+	ta.SetWidth(200)
+	ti := textinput.New()
+	m := Model{
+		currentView:        viewPicker,
+		pickerKind:         pickerObjectSubField,
+		pickerObjectParent: "sourceLocation",
+		pickerItems:        []pickerItem{{Display: "line", FilterKey: "line", Value: "line"}},
+		pickerCursor:       0,
+		query:              ta,
+		pickerInput:        ti,
+	}
+	out, _ := m.applyPickerSelection()
+	if out.currentView != viewMain {
+		t.Errorf("currentView = %v, want viewMain", out.currentView)
+	}
+	want := `sourceLocation.line = `
+	if got := out.query.Value(); got != want {
+		t.Errorf("query = %q, want %q", got, want)
+	}
+	out.query.InsertRune('4')
+	out.query.InsertRune('2')
+	wantAfter := `sourceLocation.line = 42`
+	if got := out.query.Value(); got != wantAfter {
+		t.Errorf("after InsertRune, query = %q, want %q (cursor at end-of-line for unquoted)", got, wantAfter)
+	}
+}
+
+func TestApplyFieldSelection_SplitOpensSubFieldPicker(t *testing.T) {
+	m := fieldPickerModelWithSelection("split")
+	out, cmd := m.applyPickerSelection()
+	if out.pickerKind != pickerObjectSubField {
+		t.Errorf("pickerKind = %v, want pickerObjectSubField", out.pickerKind)
+	}
+	if out.pickerObjectParent != "split" {
+		t.Errorf("pickerObjectParent = %q, want %q", out.pickerObjectParent, "split")
+	}
+	if cmd != nil {
+		t.Error("cmd = non-nil, want nil (sub-field picker is in-memory)")
+	}
+	if got, want := len(out.pickerItems), len(objectSubFields["split"]); got != want {
+		t.Errorf("sub-field items len = %d, want %d", got, want)
+	}
+}
+
+func TestApplySplitSubFieldSelection_UidInsertsSkeletonQuoted(t *testing.T) {
+	ta := textarea.New()
+	ta.SetWidth(200)
+	ti := textinput.New()
+	m := Model{
+		currentView:        viewPicker,
+		pickerKind:         pickerObjectSubField,
+		pickerObjectParent: "split",
+		pickerItems:        []pickerItem{{Display: "uid", FilterKey: "uid", Value: "uid"}},
+		pickerCursor:       0,
+		query:              ta,
+		pickerInput:        ti,
+	}
+	out, _ := m.applyPickerSelection()
+	want := `split.uid = ""`
+	if got := out.query.Value(); got != want {
+		t.Errorf("query = %q, want %q", got, want)
+	}
+	out.query.InsertRune('X')
+	wantAfter := `split.uid = "X"`
+	if got := out.query.Value(); got != wantAfter {
+		t.Errorf("after InsertRune, query = %q, want %q (cursor between quotes)", got, wantAfter)
+	}
+}

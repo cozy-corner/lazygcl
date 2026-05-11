@@ -93,6 +93,9 @@ var topLevelFields = []fieldDef{
 	{path: "logName", op: "=", quoted: true, strategy: fieldDynamicValues},
 	{path: "resource", strategy: fieldObjectSubPicker},
 	{path: "httpRequest", strategy: fieldObjectSubPicker},
+	{path: "operation", strategy: fieldObjectSubPicker},
+	{path: "sourceLocation", strategy: fieldObjectSubPicker},
+	{path: "split", strategy: fieldObjectSubPicker},
 	{path: "severity", op: ">=", quoted: true, strategy: fieldEnumValues, enumValues: severityLevels},
 	{path: "timestamp", op: ">=", quoted: true, strategy: fieldSkeleton},
 	{path: "receiveTimestamp", op: ">=", quoted: true, strategy: fieldSkeleton},
@@ -130,6 +133,22 @@ var objectSubFields = map[string][]fieldDef{
 		{path: "cacheHit", op: "=", quoted: false, strategy: fieldEnumValues, enumValues: boolEnumValues},
 		{path: "cacheValidatedWithOriginServer", op: "=", quoted: false, strategy: fieldEnumValues, enumValues: boolEnumValues},
 		{path: "cacheFillBytes", op: ">=", quoted: false, strategy: fieldSkeleton},
+	},
+	"operation": {
+		{path: "id", op: "=", quoted: true, strategy: fieldSkeleton},
+		{path: "producer", op: "=", quoted: true, strategy: fieldSkeleton},
+		{path: "first", op: "=", quoted: false, strategy: fieldEnumValues, enumValues: boolEnumValues},
+		{path: "last", op: "=", quoted: false, strategy: fieldEnumValues, enumValues: boolEnumValues},
+	},
+	"sourceLocation": {
+		{path: "file", op: "=", quoted: true, strategy: fieldSkeleton},
+		{path: "function", op: "=", quoted: true, strategy: fieldSkeleton},
+		{path: "line", op: "=", quoted: false, strategy: fieldSkeleton},
+	},
+	"split": {
+		{path: "uid", op: "=", quoted: true, strategy: fieldSkeleton},
+		{path: "index", op: "=", quoted: false, strategy: fieldSkeleton},
+		{path: "totalSplits", op: "=", quoted: false, strategy: fieldSkeleton},
 	},
 }
 
