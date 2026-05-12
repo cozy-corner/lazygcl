@@ -757,3 +757,98 @@ func TestApplySplitSubFieldSelection_UidInsertsSkeletonQuoted(t *testing.T) {
 		t.Errorf("after InsertRune, query = %q, want %q (cursor between quotes)", got, wantAfter)
 	}
 }
+
+func TestLabelKeyPath(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"env", "labels.env"},
+		{"request_id", "labels.request_id"},
+		{"_internal", "labels._internal"},
+		{"my-team", `labels."my-team"`},
+		{"compute.googleapis.com/resource_id", `labels."compute.googleapis.com/resource_id"`},
+		{"123leading_digit", `labels."123leading_digit"`},
+	}
+	for _, c := range cases {
+		if got := labelKeyPath(c.in); got != c.want {
+			t.Errorf("labelKeyPath(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestApplyFieldSelection_LabelsOpensKeyInputPicker(t *testing.T) {
+	m := fieldPickerModelWithSelection("labels")
+	out, cmd := m.applyPickerSelection()
+	if out.currentView != viewPicker {
+		t.Errorf("currentView = %v, want viewPicker (key-entry chain)", out.currentView)
+	}
+	if out.pickerKind != pickerLabelsKey {
+		t.Errorf("pickerKind = %v, want pickerLabelsKey", out.pickerKind)
+	}
+	if cmd != nil {
+		t.Error("cmd = non-nil, want nil (key-entry picker is in-memory)")
+	}
+	if len(out.pickerItems) != 0 {
+		t.Errorf("pickerItems len = %d, want 0 (no list — typed value is the selection)", len(out.pickerItems))
+	}
+	if out.query.Value() != "" {
+		t.Errorf("query = %q, want empty (no clause inserted until key is entered)", out.query.Value())
+	}
+}
+
+// labelsKeyPickerModel builds a model in pickerLabelsKey mode with the given
+// typed key, ready for applyPickerSelection.
+func labelsKeyPickerModel(key string) Model {
+	ta := textarea.New()
+	ta.SetWidth(200)
+	ti := textinput.New()
+	ti.SetValue(key)
+	return Model{
+		currentView: viewPicker,
+		pickerKind:  pickerLabelsKey,
+		query:       ta,
+		pickerInput: ti,
+	}
+}
+
+func TestApplyLabelsKeyPicker_IdentifierKeyUnquoted(t *testing.T) {
+	m := labelsKeyPickerModel("env")
+	out, _ := m.applyPickerSelection()
+	if out.currentView != viewMain {
+		t.Errorf("currentView = %v, want viewMain", out.currentView)
+	}
+	want := `labels.env = ""`
+	if got := out.query.Value(); got != want {
+		t.Errorf("query = %q, want %q", got, want)
+	}
+	out.query.InsertRune('X')
+	wantAfter := `labels.env = "X"`
+	if got := out.query.Value(); got != wantAfter {
+		t.Errorf("after InsertRune, query = %q, want %q (cursor between value quotes)", got, wantAfter)
+	}
+}
+
+func TestApplyLabelsKeyPicker_SpecialCharKeyQuoted(t *testing.T) {
+	m := labelsKeyPickerModel("my-team")
+	out, _ := m.applyPickerSelection()
+	want := `labels."my-team" = ""`
+	if got := out.query.Value(); got != want {
+		t.Errorf("query = %q, want %q", got, want)
+	}
+	out.query.InsertRune('X')
+	wantAfter := `labels."my-team" = "X"`
+	if got := out.query.Value(); got != wantAfter {
+		t.Errorf("after InsertRune, query = %q, want %q (cursor between value quotes)", got, wantAfter)
+	}
+}
+
+func TestApplyLabelsKeyPicker_EmptyKeyNoOp(t *testing.T) {
+	m := labelsKeyPickerModel("   ") // whitespace-only
+	out, _ := m.applyPickerSelection()
+	if out.currentView != viewPicker {
+		t.Errorf("currentView = %v, want viewPicker (picker stays open on empty key)", out.currentView)
+	}
+	if got := out.query.Value(); got != "" {
+		t.Errorf("query = %q, want empty (no clause inserted for empty key)", got)
+	}
+}
