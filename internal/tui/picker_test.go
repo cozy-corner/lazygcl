@@ -768,6 +768,9 @@ func TestLabelKeyPath(t *testing.T) {
 		{"my-team", `labels."my-team"`},
 		{"compute.googleapis.com/resource_id", `labels."compute.googleapis.com/resource_id"`},
 		{"123leading_digit", `labels."123leading_digit"`},
+		{`foo"bar`, `labels."foo\"bar"`},
+		{`foo\bar`, `labels."foo\\bar"`},
+		{`foo\"bar`, `labels."foo\\\"bar"`},
 	}
 	for _, c := range cases {
 		if got := labelKeyPath(c.in); got != c.want {

@@ -123,12 +123,16 @@ var topLevelFields = []fieldDef{
 var labelKeyIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // labelKeyPath formats a top-level labels clause path, quoting the key when
-// it contains characters Cloud Logging requires to be double-quoted.
+// it contains characters Cloud Logging requires to be double-quoted. Embedded
+// backslashes and double quotes are escaped per the field-path grammar
+// (`\\` and `\"`).
 func labelKeyPath(key string) string {
 	if labelKeyIdentifier.MatchString(key) {
 		return "labels." + key
 	}
-	return `labels."` + key + `"`
+	escaped := strings.ReplaceAll(key, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+	return `labels."` + escaped + `"`
 }
 
 // objectSubFields maps a top-level object's path to the schema of its
