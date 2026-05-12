@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -35,6 +36,11 @@ const (
 	// global resource-descriptor catalog. Selection inserts a
 	// `resource.labels.<key> = ""` skeleton.
 	pickerResourceLabelsAll
+	// pickerLabelsKey is a key-entry mode for top-level user labels (which
+	// have no enumerable key catalog — apps choose their own). The picker
+	// reuses pickerInput as a free-form key field; Enter inserts
+	// `labels.<key> = ""` (key auto-quoted if it contains special chars).
+	pickerLabelsKey
 )
 
 // pickerTitles holds the static header label for each picker kind.
@@ -46,6 +52,7 @@ var pickerTitles = map[pickerKind]string{
 	pickerLogName:           "Log name",
 	pickerResourceLabelsAll: "Label key",
 	pickerEnumValue:         "Value",
+	pickerLabelsKey:         "Top-level label key",
 }
 
 // fieldStrategy enumerates how the field picker dispatches when an item is
@@ -64,6 +71,9 @@ const (
 	// fieldObjectSubPicker opens a sub-field picker for an object-typed
 	// top-level field (resource → type / labels).
 	fieldObjectSubPicker
+	// fieldLabelsKey opens a key-entry picker (textinput-only) for the
+	// top-level labels map, whose keys are not enumerable.
+	fieldLabelsKey
 )
 
 // fieldDef describes a queryable LogEntry top-level field surfaced in the
@@ -104,6 +114,25 @@ var topLevelFields = []fieldDef{
 	{path: "insertId", op: "=", quoted: true, strategy: fieldSkeleton},
 	{path: "traceSampled", op: "=", quoted: false, strategy: fieldEnumValues, enumValues: boolEnumValues},
 	{path: "textPayload", op: "=~", quoted: true, strategy: fieldSkeleton},
+	{path: "labels", strategy: fieldLabelsKey},
+}
+
+// labelKeyIdentifier matches keys safe to inline without double-quoting per
+// Cloud Logging field-path rules. Anything else (hyphens, dots, slashes, ...)
+// gets quoted.
+var labelKeyIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// labelKeyPath formats a top-level labels clause path, quoting the key when
+// it contains characters Cloud Logging requires to be double-quoted. Embedded
+// backslashes and double quotes are escaped per the field-path grammar
+// (`\\` and `\"`).
+func labelKeyPath(key string) string {
+	if labelKeyIdentifier.MatchString(key) {
+		return "labels." + key
+	}
+	escaped := strings.ReplaceAll(key, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+	return `labels."` + escaped + `"`
 }
 
 // objectSubFields maps a top-level object's path to the schema of its
@@ -252,8 +281,9 @@ func (m Model) openPicker(kind pickerKind) (Model, tea.Cmd) {
 			}
 			return pickerResourceLabelsLoadedMsg{resources: rs}
 		}
-	case pickerEnumValue, pickerObjectSubField:
-		// Opened via openEnumValuePicker / openObjectSubFieldPicker.
+	case pickerEnumValue, pickerObjectSubField, pickerLabelsKey:
+		// Opened via openEnumValuePicker / openObjectSubFieldPicker /
+		// openLabelsKeyPicker — these set their own items inline.
 	}
 	return m, nil
 }
@@ -370,8 +400,16 @@ func (m Model) renderPicker() string {
 	}
 	header := fmt.Sprintf("Select %s — type to filter, enter to select, esc to cancel",
 		titleStr)
+	if m.pickerKind == pickerLabelsKey {
+		header = fmt.Sprintf("Enter %s — enter to insert, esc to cancel", titleStr)
+	}
 	fmt.Fprintln(&b, headerStyle.Render(header))
 	fmt.Fprintln(&b, m.pickerInput.View())
+
+	// Key-entry mode has no item list — header + input is the whole UI.
+	if m.pickerKind == pickerLabelsKey {
+		return b.String()
+	}
 
 	if m.pickerLoading {
 		fmt.Fprintln(&b, dimStyle.Render("loading…"))
@@ -466,6 +504,17 @@ func (m Model) movePickerCursor(delta int) Model {
 }
 
 func (m Model) applyPickerSelection() (Model, tea.Cmd) {
+	// pickerLabelsKey has no item list — the typed pickerInput value is the
+	// "selection". Handle before the items-based path below.
+	if m.pickerKind == pickerLabelsKey {
+		key := strings.TrimSpace(m.pickerInput.Value())
+		if key == "" {
+			return m, nil
+		}
+		m.appendSkeletonClause(labelKeyPath(key), "=", true)
+		return m.closePicker(), nil
+	}
+
 	indices := m.filteredPickerItems()
 	if len(indices) == 0 || m.pickerCursor >= len(indices) {
 		return m, nil
@@ -494,6 +543,9 @@ func (m Model) applyPickerSelection() (Model, tea.Cmd) {
 
 	case pickerObjectSubField:
 		return m.applyObjectSubFieldSelection(item.Value)
+
+	case pickerLabelsKey:
+		// Handled in the early-return above; unreachable here.
 	}
 	return m, nil
 }
@@ -537,7 +589,7 @@ func (m Model) applyObjectSubFieldSelection(subPath string) (Model, tea.Cmd) {
 	case fieldSkeleton:
 		m.appendSkeletonClause(fullPath, sub.op, sub.quoted)
 		return m.closePicker(), nil
-	case fieldDynamicValues, fieldObjectSubPicker:
+	case fieldDynamicValues, fieldObjectSubPicker, fieldLabelsKey:
 		// Top-level strategies only.
 	}
 	return m.closePicker(), nil
@@ -561,8 +613,29 @@ func (m Model) applyFieldSelection(path string) (Model, tea.Cmd) {
 		return m.closePicker(), nil
 	case fieldObjectSubPicker:
 		return m.openObjectSubFieldPicker(f.path), nil
+	case fieldLabelsKey:
+		return m.openLabelsKeyPicker(), nil
 	}
 	return m.closePicker(), nil
+}
+
+// openLabelsKeyPicker enters the key-entry mode for top-level labels.
+// pickerInput is reused as a free-form key field; there are no list items,
+// so applyPickerSelection reads the typed value on Enter.
+func (m Model) openLabelsKeyPicker() Model {
+	ti := textinput.New()
+	ti.Placeholder = "type label key, Enter to insert…"
+	ti.Focus()
+
+	m.currentView = viewPicker
+	m.pickerKind = pickerLabelsKey
+	m.pickerInput = ti
+	m.pickerItems = nil
+	m.pickerCursor = 0
+	m.pickerOffset = 0
+	m.pickerLoading = false
+	m.pickerErr = nil
+	return m
 }
 
 // openObjectSubFieldPicker opens the sub-field picker for the given
