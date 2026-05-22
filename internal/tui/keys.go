@@ -31,6 +31,8 @@ func (m Model) handleQueryKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyCtrlC:
 		m.cancel()
 		return m, tea.Quit
+	case tea.KeyCtrlR:
+		return m.openHistoryPicker()
 	}
 	if msg.Type == tea.KeyEnter && msg.Alt {
 		// Alt+Enter inserts a newline so users can write multi-line filters.

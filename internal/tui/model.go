@@ -57,6 +57,10 @@ type Model struct {
 	err         error
 	errIsSyntax bool
 
+	// flash is a transient one-line dim notice (e.g. "no history") rendered
+	// below the loading/error area. Cleared at the start of every key event.
+	flash string
+
 	// Picker state. Populated when currentView == viewPicker.
 	pickerKind    pickerKind
 	pickerInput   textinput.Model
@@ -114,6 +118,13 @@ func NewModel(opts Options) Model {
 func (m Model) Init() tea.Cmd { return textarea.Blink }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// The transient flash lives for exactly one event. Clearing here covers
+	// async messages too (a query result landing after the flash was set
+	// would otherwise leave the notice on screen indefinitely). Handlers
+	// below may set a new flash for THIS event; that survives because the
+	// clear ran first.
+	m.flash = ""
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -257,9 +268,12 @@ func (m Model) renderMain() string {
 	if m.loading {
 		fmt.Fprintln(&b, dimStyle.Render("loading…"))
 	}
+	if m.flash != "" {
+		fmt.Fprintln(&b, dimStyle.Render(m.flash))
+	}
 	var hints string
 	if m.focus == paneQuery {
-		hints = "[tab] focus  [enter] run  [^F] field  [^C] quit"
+		hints = "[tab] focus  [enter] run  [^F] field  [^R] history  [^C] quit"
 	} else {
 		hints = "[tab] focus  [enter] open  [j/k] move  [g/G] top/bottom  [q] quit"
 	}

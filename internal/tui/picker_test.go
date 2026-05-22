@@ -1,12 +1,14 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cozy-corner/lazygcl/internal/gcp"
+	"github.com/cozy-corner/lazygcl/internal/history"
 )
 
 // TestHandleKey_OpensFieldPicker verifies Ctrl+F from the main view opens
@@ -853,5 +855,136 @@ func TestApplyLabelsKeyPicker_EmptyKeyNoOp(t *testing.T) {
 	}
 	if got := out.query.Value(); got != "" {
 		t.Errorf("query = %q, want empty (no clause inserted for empty key)", got)
+	}
+}
+
+// historyPickerModel builds a Model in pickerHistory mode with the given
+// items and the cursor at index 0, ready for applyPickerSelection.
+func historyPickerModel(items []pickerItem) Model {
+	ta := textarea.New()
+	ta.SetWidth(200)
+	ta.SetValue("preexisting query that must be replaced")
+	ti := textinput.New()
+	return Model{
+		currentView:  viewPicker,
+		pickerKind:   pickerHistory,
+		pickerItems:  items,
+		pickerCursor: 0,
+		query:        ta,
+		pickerInput:  ti,
+	}
+}
+
+// TestApplyPickerSelection_HistoryReplacesQuery: the history picker replaces
+// the query value outright (unlike every other picker, which AND-appends).
+func TestApplyPickerSelection_HistoryReplacesQuery(t *testing.T) {
+	m := historyPickerModel([]pickerItem{
+		{Display: `severity >= "ERROR"`, FilterKey: `severity >= "error"`, Value: `severity >= "ERROR"`},
+	})
+	out, _ := m.applyPickerSelection()
+	if out.currentView != viewMain {
+		t.Errorf("currentView = %v, want viewMain", out.currentView)
+	}
+	want := `severity >= "ERROR"`
+	if got := out.query.Value(); got != want {
+		t.Errorf("query = %q, want %q (must replace, not append)", got, want)
+	}
+}
+
+// TestApplyPickerSelection_HistoryPreservesMultilineValue: an entry with
+// embedded newlines is inserted as-is, with newlines intact.
+func TestApplyPickerSelection_HistoryPreservesMultilineValue(t *testing.T) {
+	multiline := "severity >= \"ERROR\" AND\nresource.type = \"gce_instance\""
+	m := historyPickerModel([]pickerItem{
+		{Display: strings.ReplaceAll(multiline, "\n", " "), FilterKey: "x", Value: multiline},
+	})
+	out, _ := m.applyPickerSelection()
+	if got := out.query.Value(); got != multiline {
+		t.Errorf("query = %q, want %q (newlines preserved)", got, multiline)
+	}
+}
+
+// TestOpenHistoryPicker_EmptySetsFlash: when there is no history, the picker
+// does not open; instead a transient flash message is set.
+func TestOpenHistoryPicker_EmptySetsFlash(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	m := Model{
+		currentView: viewMain,
+		focus:       paneQuery,
+		project:     "empty-project",
+		query:       textarea.New(),
+	}
+	out, _ := m.openHistoryPicker()
+	if out.currentView != viewMain {
+		t.Errorf("currentView = %v, want viewMain (picker must not open)", out.currentView)
+	}
+	if out.flash == "" {
+		t.Error("flash is empty, want a 'no history' notice")
+	}
+}
+
+// TestOpenHistoryPicker_NonEmptyOpensPicker: with history, the picker opens
+// with newest-first items and multi-line entries collapsed for display.
+func TestOpenHistoryPicker_NonEmptyOpensPicker(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	multiline := "severity >= \"ERROR\" AND\nresource.type = \"gce_instance\""
+	if err := history.Append("p", `severity >= "ERROR"`); err != nil {
+		t.Fatal(err)
+	}
+	if err := history.Append("p", multiline); err != nil {
+		t.Fatal(err)
+	}
+
+	m := Model{
+		currentView: viewMain,
+		focus:       paneQuery,
+		project:     "p",
+		query:       textarea.New(),
+	}
+	out, _ := m.openHistoryPicker()
+	if out.currentView != viewPicker {
+		t.Fatalf("currentView = %v, want viewPicker", out.currentView)
+	}
+	if out.pickerKind != pickerHistory {
+		t.Errorf("pickerKind = %v, want pickerHistory", out.pickerKind)
+	}
+	if got := len(out.pickerItems); got != 2 {
+		t.Fatalf("pickerItems len = %d, want 2", got)
+	}
+	// Newest first: multiline was appended second, so it lands at index 0.
+	if out.pickerItems[0].Value != multiline {
+		t.Errorf("items[0].Value = %q, want %q", out.pickerItems[0].Value, multiline)
+	}
+	if strings.Contains(out.pickerItems[0].Display, "\n") {
+		t.Errorf("items[0].Display = %q, want newlines collapsed", out.pickerItems[0].Display)
+	}
+	if out.pickerItems[1].Value != `severity >= "ERROR"` {
+		t.Errorf("items[1].Value = %q, want %q", out.pickerItems[1].Value, `severity >= "ERROR"`)
+	}
+}
+
+// TestHandleQueryKey_CtrlROpensHistoryPicker: Ctrl+R while the query pane has
+// focus dispatches to the history picker.
+func TestHandleQueryKey_CtrlROpensHistoryPicker(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if err := history.Append("p", "anything"); err != nil {
+		t.Fatal(err)
+	}
+	m := Model{
+		currentView: viewMain,
+		focus:       paneQuery,
+		project:     "p",
+		query:       textarea.New(),
+	}
+	out, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlR})
+	got, ok := out.(Model)
+	if !ok {
+		t.Fatalf("handleKey returned %T, want Model", out)
+	}
+	if got.currentView != viewPicker {
+		t.Errorf("currentView = %v, want viewPicker", got.currentView)
+	}
+	if got.pickerKind != pickerHistory {
+		t.Errorf("pickerKind = %v, want pickerHistory", got.pickerKind)
 	}
 }
