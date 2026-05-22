@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cozy-corner/lazygcl/internal/gcp"
+	"github.com/cozy-corner/lazygcl/internal/history"
 	"github.com/sahilm/fuzzy"
 )
 
@@ -41,6 +42,10 @@ const (
 	// reuses pickerInput as a free-form key field; Enter inserts
 	// `labels.<key> = ""` (key auto-quoted if it contains special chars).
 	pickerLabelsKey
+	// pickerHistory lists previously-submitted queries for the current
+	// project, newest-first. Unlike every other picker, selection REPLACES
+	// the query value rather than AND-appending — recall, not compose.
+	pickerHistory
 )
 
 // pickerTitles holds the static header label for each picker kind.
@@ -53,6 +58,7 @@ var pickerTitles = map[pickerKind]string{
 	pickerResourceLabelsAll: "Label key",
 	pickerEnumValue:         "Value",
 	pickerLabelsKey:         "Top-level label key",
+	pickerHistory:           "Query history",
 }
 
 // fieldStrategy enumerates how the field picker dispatches when an item is
@@ -281,9 +287,10 @@ func (m Model) openPicker(kind pickerKind) (Model, tea.Cmd) {
 			}
 			return pickerResourceLabelsLoadedMsg{resources: rs}
 		}
-	case pickerEnumValue, pickerObjectSubField, pickerLabelsKey:
+	case pickerEnumValue, pickerObjectSubField, pickerLabelsKey, pickerHistory:
 		// Opened via openEnumValuePicker / openObjectSubFieldPicker /
-		// openLabelsKeyPicker — these set their own items inline.
+		// openLabelsKeyPicker / openHistoryPicker — these set their own
+		// items inline.
 	}
 	return m, nil
 }
@@ -544,6 +551,12 @@ func (m Model) applyPickerSelection() (Model, tea.Cmd) {
 	case pickerObjectSubField:
 		return m.applyObjectSubFieldSelection(item.Value)
 
+	case pickerHistory:
+		// Recall: REPLACE the query value (and do not auto-submit). The user
+		// presses Enter again from the query pane to actually run it.
+		m.query.SetValue(item.Value)
+		return m.closePicker(), nil
+
 	case pickerLabelsKey:
 		// Handled in the early-return above; unreachable here.
 	}
@@ -667,6 +680,45 @@ func (m Model) openObjectSubFieldPicker(parentPath string) Model {
 	m.pickerErr = nil
 	m.pickerObjectParent = parentPath
 	return m
+}
+
+// openHistoryPicker loads per-project history synchronously and opens the
+// picker. On empty history, sets a transient flash and stays on viewMain so
+// the user gets immediate feedback instead of an empty popup.
+func (m Model) openHistoryPicker() (Model, tea.Cmd) {
+	// Load errors are intentionally silenced: history is an aid, not a
+	// load-bearing feature. A read failure should not block the user.
+	entries, _ := history.Load(m.project)
+	if len(entries) == 0 {
+		m.flash = "no history"
+		return m, nil
+	}
+
+	ti := textinput.New()
+	ti.Placeholder = "filter…"
+	ti.Focus()
+
+	items := make([]pickerItem, 0, len(entries))
+	for _, q := range entries {
+		// Collapse newlines for display and as the fuzzy haystack; the
+		// original (newlines intact) is what gets restored on Enter.
+		oneLine := strings.ReplaceAll(q, "\n", " ")
+		items = append(items, pickerItem{
+			Display:   oneLine,
+			FilterKey: strings.ToLower(oneLine),
+			Value:     q,
+		})
+	}
+
+	m.currentView = viewPicker
+	m.pickerKind = pickerHistory
+	m.pickerInput = ti
+	m.pickerItems = items
+	m.pickerCursor = 0
+	m.pickerOffset = 0
+	m.pickerLoading = false
+	m.pickerErr = nil
+	return m, nil
 }
 
 // closePicker returns to the main view and re-focuses the query pane.
