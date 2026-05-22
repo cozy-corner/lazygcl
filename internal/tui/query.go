@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cozy-corner/lazygcl/internal/gcp"
+	"github.com/cozy-corner/lazygcl/internal/history"
 )
 
 // pageBatch is how many entries each fetchPage Cmd pulls from the stream
@@ -24,6 +25,11 @@ func (m Model) runQuery() (Model, tea.Cmd) {
 		m.streamCancel()
 	}
 	filter := strings.TrimSpace(m.query.Value())
+
+	// Record before the search so that even filter-syntax errors land in
+	// history — recovering "what I just tried" is the point. Persistence
+	// failures are intentionally swallowed; they should not block the search.
+	_ = history.Append(m.project, filter)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	m.streamCtx = ctx

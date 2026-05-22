@@ -39,6 +39,7 @@ Project resolution order: `--project` flag → `GOOGLE_CLOUD_PROJECT` env → `g
 | `j` / `k`, `↑` / `↓` | Move cursor |
 | `g` / `G` | Jump to top / bottom |
 | `Ctrl+F` | Open the field picker (top-level LogEntry fields) |
+| `Ctrl+R` (in query) | Recall a previously-submitted query from history |
 | In picker: `↑` / `↓`, `Ctrl+J` / `Ctrl+K`, `Ctrl+N` / `Ctrl+P` | Move cursor |
 | In picker: `Enter` | Accept the highlighted item |
 | `Esc` | Back (close detail / cancel picker) |
@@ -53,6 +54,8 @@ Project resolution order: `--project` flag → `GOOGLE_CLOUD_PROJECT` env → `g
 - **Label key entry** — for maps with app-defined keys (top-level `labels`), prompts for the key in a textinput and inserts `labels.<key> = ""` (key auto-quoted when Cloud Logging requires it).
 
 All pickers support fzf-style fuzzy filtering: `gci` matches `gce_instance`, `run` matches `cloud_run_revision`, and so on. The resource type picker lists every monitored resource type Cloud Logging knows about (global catalog) — picking one that isn't producing logs in your project just yields an empty result. The logName picker lists names that actually have entries in the bound project.
+
+`Ctrl+R` from the query pane opens a per-project history picker (newest first, same fzf filter). Selecting an entry replaces the query value but does not auto-submit — press Enter to run it. Multi-line queries are collapsed to one line in the list but restored intact when chosen. History is stored as JSONL under `$XDG_DATA_HOME/lazygcl/history/<project>.jsonl` (defaults to `~/.local/share/lazygcl/history/...`), capped at 500 entries per project, with consecutive duplicates dropped.
 
 Auto-paging fires when the cursor is near the end of the loaded results.
 
