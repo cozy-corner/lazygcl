@@ -47,14 +47,17 @@ func (q queryInput) Value() string {
 	return strings.Join(parts, "\n")
 }
 
-// SetValue replaces the buffer with s, splitting on "\n", and clamps the cursor.
+// SetValue replaces the buffer with s, splitting on "\n", and parks the cursor
+// at the end (matching bubbles/textarea, so history recall lands the cursor
+// after the recalled query rather than before it).
 func (q *queryInput) SetValue(s string) {
 	raw := strings.Split(s, "\n")
 	q.lines = make([][]rune, len(raw))
 	for i, line := range raw {
 		q.lines[i] = []rune(line)
 	}
-	q.clamp()
+	q.row = len(q.lines) - 1
+	q.col = len(q.lines[q.row])
 }
 
 // SetCursor places the cursor on the last line at rune offset pos. This mirrors

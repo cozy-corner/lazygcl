@@ -4,12 +4,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cozy-corner/lazygcl/internal/gcp"
 	"github.com/cozy-corner/lazygcl/internal/history"
 )
+
+// insertRune types a single rune into the model's query input via the real key
+// path, so tests can probe where the cursor was left.
+func insertRune(m Model, r rune) Model {
+	m.query, _ = m.query.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	return m
+}
 
 // TestHandleKey_OpensFieldPicker verifies Ctrl+F from the main view opens
 // the in-memory field picker.
@@ -35,7 +41,7 @@ func TestHandleKey_OpensFieldPicker(t *testing.T) {
 }
 
 func TestApplyPickerSelection_AppendsClause(t *testing.T) {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ti := textinput.New()
 	m := Model{
 		currentView:  viewPicker,
@@ -162,7 +168,7 @@ func TestResourceItems(t *testing.T) {
 }
 
 func TestApplyPickerSelection_ResourceTypeClosesPicker(t *testing.T) {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ti := textinput.New()
 	m := Model{
 		currentView:  viewPicker,
@@ -198,7 +204,7 @@ func TestLabelKeyItems(t *testing.T) {
 // fieldPickerModelWithSelection builds a model whose pickerField items
 // contain a single item for `path` so applyPickerSelection picks it.
 func fieldPickerModelWithSelection(path string) Model {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ta.SetWidth(200)
 	ti := textinput.New()
 	return Model{
@@ -221,7 +227,7 @@ func TestApplyFieldSelection_SkeletonInsertsClauseWithCursor(t *testing.T) {
 	if got := out.query.Value(); got != want {
 		t.Errorf("query = %q, want %q", got, want)
 	}
-	out.query.InsertRune('X')
+	out = insertRune(out, 'X')
 	if got := out.query.Value(); got != `trace = "X"` {
 		t.Errorf("after InsertRune, query = %q, want trace = \"X\" (cursor not between quotes)", got)
 	}
@@ -278,7 +284,7 @@ func TestApplyFieldSelection_TraceSampledChainsIntoEnumPickerUnquoted(t *testing
 }
 
 func TestApplyEnumValueSelection_SeverityInsertsClause(t *testing.T) {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ta.SetWidth(200)
 	ti := textinput.New()
 	m := Model{
@@ -303,7 +309,7 @@ func TestApplyEnumValueSelection_SeverityInsertsClause(t *testing.T) {
 }
 
 func TestApplyEnumValueSelection_TraceSampledUnquoted(t *testing.T) {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ta.SetWidth(200)
 	ti := textinput.New()
 	m := Model{
@@ -359,7 +365,7 @@ func TestApplyFieldSelection_ResourceOpensSubFieldPicker(t *testing.T) {
 }
 
 func TestApplyResourceSubFieldSelection_TypeDispatchesToResourcePicker(t *testing.T) {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ti := textinput.New()
 	m := Model{
 		currentView:        viewPicker,
@@ -383,7 +389,7 @@ func TestApplyResourceSubFieldSelection_TypeDispatchesToResourcePicker(t *testin
 }
 
 func TestApplyResourceSubFieldSelection_LabelsDispatchesToLabelsAllPicker(t *testing.T) {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ti := textinput.New()
 	m := Model{
 		currentView:        viewPicker,
@@ -427,7 +433,7 @@ func TestApplyFieldSelection_HttpRequestOpensSubFieldPicker(t *testing.T) {
 }
 
 func TestApplyHttpRequestSubFieldSelection_StatusInsertsSkeletonUnquoted(t *testing.T) {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ta.SetWidth(200)
 	ti := textinput.New()
 	m := Model{
@@ -447,7 +453,7 @@ func TestApplyHttpRequestSubFieldSelection_StatusInsertsSkeletonUnquoted(t *test
 	if got := out.query.Value(); got != want {
 		t.Errorf("query = %q, want %q", got, want)
 	}
-	out.query.InsertRune('5')
+	out = insertRune(out, '5')
 	wantAfter := `httpRequest.status >= 5`
 	if got := out.query.Value(); got != wantAfter {
 		t.Errorf("after InsertRune, query = %q, want %q (cursor at end-of-line for unquoted)", got, wantAfter)
@@ -455,7 +461,7 @@ func TestApplyHttpRequestSubFieldSelection_StatusInsertsSkeletonUnquoted(t *test
 }
 
 func TestApplyHttpRequestSubFieldSelection_RequestUrlInsertsSkeletonQuoted(t *testing.T) {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ta.SetWidth(200)
 	ti := textinput.New()
 	m := Model{
@@ -472,7 +478,7 @@ func TestApplyHttpRequestSubFieldSelection_RequestUrlInsertsSkeletonQuoted(t *te
 	if got := out.query.Value(); got != want {
 		t.Errorf("query = %q, want %q", got, want)
 	}
-	out.query.InsertRune('X')
+	out = insertRune(out, 'X')
 	wantAfter := `httpRequest.requestUrl =~ "X"`
 	if got := out.query.Value(); got != wantAfter {
 		t.Errorf("after InsertRune, query = %q, want %q (cursor between quotes)", got, wantAfter)
@@ -480,7 +486,7 @@ func TestApplyHttpRequestSubFieldSelection_RequestUrlInsertsSkeletonQuoted(t *te
 }
 
 func TestApplyHttpRequestSubFieldSelection_RequestMethodChainsToEnumPicker(t *testing.T) {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ti := textinput.New()
 	m := Model{
 		currentView:        viewPicker,
@@ -510,7 +516,7 @@ func TestApplyHttpRequestSubFieldSelection_RequestMethodChainsToEnumPicker(t *te
 }
 
 func TestApplyHttpRequestSubFieldSelection_CacheHitChainsToEnumPickerUnquoted(t *testing.T) {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ti := textinput.New()
 	m := Model{
 		currentView:        viewPicker,
@@ -534,7 +540,7 @@ func TestApplyHttpRequestSubFieldSelection_CacheHitChainsToEnumPickerUnquoted(t 
 }
 
 func TestApplyPickerSelection_LabelsAllInsertsClauseWithCursor(t *testing.T) {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ta.SetWidth(200)
 	ti := textinput.New()
 	m := Model{
@@ -550,7 +556,7 @@ func TestApplyPickerSelection_LabelsAllInsertsClauseWithCursor(t *testing.T) {
 	if got := out.query.Value(); got != want {
 		t.Errorf("query = %q, want %q", got, want)
 	}
-	out.query.InsertRune('X')
+	out = insertRune(out, 'X')
 	wantAfter := `resource.labels.service_name = "X"`
 	if got := out.query.Value(); got != wantAfter {
 		t.Errorf("after InsertRune, query = %q, want %q", got, wantAfter)
@@ -646,7 +652,7 @@ func TestApplyFieldSelection_OperationOpensSubFieldPicker(t *testing.T) {
 }
 
 func TestApplyOperationSubFieldSelection_FirstChainsToEnumPickerUnquoted(t *testing.T) {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ti := textinput.New()
 	m := Model{
 		currentView:        viewPicker,
@@ -690,7 +696,7 @@ func TestApplyFieldSelection_SourceLocationOpensSubFieldPicker(t *testing.T) {
 }
 
 func TestApplySourceLocationSubFieldSelection_LineInsertsSkeletonUnquoted(t *testing.T) {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ta.SetWidth(200)
 	ti := textinput.New()
 	m := Model{
@@ -710,8 +716,8 @@ func TestApplySourceLocationSubFieldSelection_LineInsertsSkeletonUnquoted(t *tes
 	if got := out.query.Value(); got != want {
 		t.Errorf("query = %q, want %q", got, want)
 	}
-	out.query.InsertRune('4')
-	out.query.InsertRune('2')
+	out = insertRune(out, '4')
+	out = insertRune(out, '2')
 	wantAfter := `sourceLocation.line = 42`
 	if got := out.query.Value(); got != wantAfter {
 		t.Errorf("after InsertRune, query = %q, want %q (cursor at end-of-line for unquoted)", got, wantAfter)
@@ -736,7 +742,7 @@ func TestApplyFieldSelection_SplitOpensSubFieldPicker(t *testing.T) {
 }
 
 func TestApplySplitSubFieldSelection_UidInsertsSkeletonQuoted(t *testing.T) {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ta.SetWidth(200)
 	ti := textinput.New()
 	m := Model{
@@ -753,7 +759,7 @@ func TestApplySplitSubFieldSelection_UidInsertsSkeletonQuoted(t *testing.T) {
 	if got := out.query.Value(); got != want {
 		t.Errorf("query = %q, want %q", got, want)
 	}
-	out.query.InsertRune('X')
+	out = insertRune(out, 'X')
 	wantAfter := `split.uid = "X"`
 	if got := out.query.Value(); got != wantAfter {
 		t.Errorf("after InsertRune, query = %q, want %q (cursor between quotes)", got, wantAfter)
@@ -804,7 +810,7 @@ func TestApplyFieldSelection_LabelsOpensKeyInputPicker(t *testing.T) {
 // labelsKeyPickerModel builds a model in pickerLabelsKey mode with the given
 // typed key, ready for applyPickerSelection.
 func labelsKeyPickerModel(key string) Model {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ta.SetWidth(200)
 	ti := textinput.New()
 	ti.SetValue(key)
@@ -826,7 +832,7 @@ func TestApplyLabelsKeyPicker_IdentifierKeyUnquoted(t *testing.T) {
 	if got := out.query.Value(); got != want {
 		t.Errorf("query = %q, want %q", got, want)
 	}
-	out.query.InsertRune('X')
+	out = insertRune(out, 'X')
 	wantAfter := `labels.env = "X"`
 	if got := out.query.Value(); got != wantAfter {
 		t.Errorf("after InsertRune, query = %q, want %q (cursor between value quotes)", got, wantAfter)
@@ -840,7 +846,7 @@ func TestApplyLabelsKeyPicker_SpecialCharKeyQuoted(t *testing.T) {
 	if got := out.query.Value(); got != want {
 		t.Errorf("query = %q, want %q", got, want)
 	}
-	out.query.InsertRune('X')
+	out = insertRune(out, 'X')
 	wantAfter := `labels."my-team" = "X"`
 	if got := out.query.Value(); got != wantAfter {
 		t.Errorf("after InsertRune, query = %q, want %q (cursor between value quotes)", got, wantAfter)
@@ -861,7 +867,7 @@ func TestApplyLabelsKeyPicker_EmptyKeyNoOp(t *testing.T) {
 // historyPickerModel builds a Model in pickerHistory mode with the given
 // items and the cursor at index 0, ready for applyPickerSelection.
 func historyPickerModel(items []pickerItem) Model {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ta.SetWidth(200)
 	ta.SetValue("preexisting query that must be replaced")
 	ti := textinput.New()
@@ -912,7 +918,7 @@ func TestOpenHistoryPicker_EmptySetsFlash(t *testing.T) {
 		currentView: viewMain,
 		focus:       paneQuery,
 		project:     "empty-project",
-		query:       textarea.New(),
+		query:       newQueryInput(),
 	}
 	out, _ := m.openHistoryPicker()
 	if out.currentView != viewMain {
@@ -939,7 +945,7 @@ func TestOpenHistoryPicker_NonEmptyOpensPicker(t *testing.T) {
 		currentView: viewMain,
 		focus:       paneQuery,
 		project:     "p",
-		query:       textarea.New(),
+		query:       newQueryInput(),
 	}
 	out, _ := m.openHistoryPicker()
 	if out.currentView != viewPicker {
@@ -974,7 +980,7 @@ func TestHandleQueryKey_CtrlROpensHistoryPicker(t *testing.T) {
 		currentView: viewMain,
 		focus:       paneQuery,
 		project:     "p",
-		query:       textarea.New(),
+		query:       newQueryInput(),
 	}
 	out, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlR})
 	got, ok := out.(Model)

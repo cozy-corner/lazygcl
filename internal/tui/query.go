@@ -17,7 +17,7 @@ import (
 // page is bigger.
 const pageBatch = 50
 
-// runQuery starts a new search using the textarea contents. It mutates the
+// runQuery starts a new search using the query input contents. It mutates the
 // model (resets entries, increments the generation, opens a fresh stream)
 // and returns a Cmd that fetches the first batch.
 func (m Model) runQuery() (Model, tea.Cmd) {
