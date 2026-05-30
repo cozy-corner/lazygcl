@@ -94,6 +94,24 @@ func TestQueryInputSetValueParksCursorAtEnd(t *testing.T) {
 	}
 }
 
+func TestQueryInputDeleteJoinsLines(t *testing.T) {
+	// Build two lines by typing so the setup is independent of SetValue's
+	// cursor placement, then delete at end-of-line to join with the next line.
+	qi := typeRunes(newQueryInput(), "ab")
+	qi = press(qi, tea.KeyEnter, true) // Alt+Enter -> second line
+	qi = typeRunes(qi, "cd")
+	qi = press(qi, tea.KeyHome, false)   // start of line 2
+	qi = press(qi, tea.KeyLeft, false)   // end of line 1
+	qi = press(qi, tea.KeyDelete, false) // join: "abcd", cursor between b and c
+	if got := qi.Value(); got != "abcd" {
+		t.Fatalf("delete join: got %q", got)
+	}
+	qi = typeRunes(qi, "-")
+	if got := qi.Value(); got != "ab-cd" {
+		t.Fatalf("cursor after join: got %q", got)
+	}
+}
+
 func TestQueryInputAltEnterSplitsLine(t *testing.T) {
 	qi := typeRunes(newQueryInput(), "ab")
 	qi = press(qi, tea.KeyEnter, true) // Alt+Enter -> newline
