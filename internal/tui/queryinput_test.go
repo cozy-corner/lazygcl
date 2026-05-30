@@ -72,9 +72,8 @@ func TestQueryInputBackspaceDeleteHomeEnd(t *testing.T) {
 
 func TestQueryInputBackspaceJoinsLines(t *testing.T) {
 	qi := newQueryInput()
-	qi.SetValue("ab\ncd")
-	qi = press(qi, tea.KeyEnd, false)       // end of line 1
-	qi = press(qi, tea.KeyRight, false)     // start of line 2
+	qi.SetValue("ab\ncd")                   // cursor parked at end of line 2
+	qi = press(qi, tea.KeyHome, false)      // start of line 2
 	qi = press(qi, tea.KeyBackspace, false) // join: "abcd", cursor between b and c
 	if got := qi.Value(); got != "abcd" {
 		t.Fatalf("backspace join: got %q", got)
@@ -82,6 +81,16 @@ func TestQueryInputBackspaceJoinsLines(t *testing.T) {
 	qi = typeRunes(qi, "-")
 	if got := qi.Value(); got != "ab-cd" {
 		t.Fatalf("cursor after join: got %q", got)
+	}
+}
+
+func TestQueryInputSetValueParksCursorAtEnd(t *testing.T) {
+	qi := newQueryInput()
+	qi.SetValue("ab\ncd")
+	// Cursor must sit after the last rune: typing appends to the end.
+	qi = typeRunes(qi, "X")
+	if got := qi.Value(); got != "ab\ncdX" {
+		t.Fatalf("SetValue should park cursor at end: got %q", got)
 	}
 }
 
