@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -39,7 +38,7 @@ type Model struct {
 	currentView view
 	focus       pane
 
-	query   textarea.Model
+	query   queryInput
 	detail  viewport.Model
 	entries []gcp.LogEntry
 	cursor  int
@@ -95,9 +94,8 @@ type Options struct {
 }
 
 func NewModel(opts Options) Model {
-	ta := textarea.New()
+	ta := newQueryInput()
 	ta.Placeholder = `severity >= "ERROR" AND timestamp > "2026-05-01T00:00:00Z"`
-	ta.SetHeight(4)
 	ta.Focus()
 
 	vp := viewport.New(0, 0)
@@ -115,7 +113,7 @@ func NewModel(opts Options) Model {
 	}
 }
 
-func (m Model) Init() tea.Cmd { return textarea.Blink }
+func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// The transient flash lives for exactly one event. Clearing here covers
