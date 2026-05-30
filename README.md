@@ -45,6 +45,8 @@ Project resolution order: `--project` flag → `GOOGLE_CLOUD_PROJECT` env → `g
 | `Esc` | Back (close detail / cancel picker) |
 | `q` / `Ctrl+C` | Quit |
 
+The query pane highlights LQL syntax in place as you type — keywords (`AND`/`OR`/`NOT`), operators, strings, and numbers are coloured directly in the editable field.
+
 `Ctrl+F` opens a single picker over the LogEntry top-level fields you can filter on. Selecting a field dispatches by strategy:
 
 - **Dynamic value picker** — values fetched live from Cloud Logging (e.g. `logName`, resource types, label keys).
